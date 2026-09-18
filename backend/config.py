@@ -36,6 +36,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "tts": {
         "engine": "cosyvoice",  # cosyvoice | edge_tts
+        "voice_name": "en-US-AnaNeural",
         "active_voice_path": "",  # Path to user-selected reference .wav file
         "sample_rate": 22050,
         "speed": 1.0,

@@ -34,3 +34,5 @@ tmp/
 temp/
 _dlp3d_upstream/
 _dlp3d_orchestrator/
+voices/*
+!voices/.gitkeep

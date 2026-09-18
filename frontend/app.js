@@ -47,6 +47,7 @@ const modelsList = document.getElementById("models-list");
 const voicePathInput = document.getElementById("voice-path-input");
 const setVoiceBtn = document.getElementById("set-voice-btn");
 const voiceStatus = document.getElementById("voice-status");
+const voicePresetSelect = document.getElementById("voice-preset-select");
 const systemPromptInput = document.getElementById("system-prompt-input");
 const savePromptBtn = document.getElementById("save-prompt-btn");
 const camFaceBtn = document.getElementById("cam-face-btn");
@@ -553,12 +554,33 @@ async function loadConfig() {
     if (cfg.tts?.active_voice_path) {
       voicePathInput.value = cfg.tts.active_voice_path;
     }
+    if (cfg.tts?.voice_name && voicePresetSelect) {
+      voicePresetSelect.value = cfg.tts.voice_name;
+    }
   } catch (e) {
     console.error("Config load error:", e);
   }
 }
 
 // --- 7. Event Listeners ---
+if (voicePresetSelect) {
+  voicePresetSelect.onchange = async () => {
+    const selectedVoice = voicePresetSelect.value;
+    try {
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { tts: { voice_name: selectedVoice } } }),
+      });
+      voiceStatus.className = "status-msg success";
+      voiceStatus.textContent = `✓ Neural voice preset set to: ${selectedVoice}`;
+    } catch (err) {
+      voiceStatus.className = "status-msg error";
+      voiceStatus.textContent = `✗ Failed to update voice preset: ${err.message}`;
+    }
+  };
+}
+
 chatForm.onsubmit = (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();

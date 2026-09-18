@@ -39,12 +39,13 @@ app.add_middleware(
 
 config_mgr = ConfigManager()
 
-# Initialize TTS Client
-tts_engine_name = config_mgr.get("tts", "engine", default="mock")
-if tts_engine_name == "cosyvoice":
-    tts_client = CosyVoiceTTSClient()
-else:
-    tts_client = MockTTSClient()
+# Initialize TTS Client (CosyVoice with real Neural Anime speech fallback)
+tts_engine_name = config_mgr.get("tts", "engine", default="cosyvoice")
+preset_voice = config_mgr.get("tts", "voice_name", default="en-US-AnaNeural")
+tts_client = CosyVoiceTTSClient()
+if hasattr(tts_client, "fallback_tts"):
+    tts_client.fallback_tts.voice_name = preset_voice
+
 
 
 class ModelSelectRequest(BaseModel):
@@ -172,6 +173,28 @@ async def upload_voice(file: UploadFile = File(...)):
 
 
 
+@app.get("/api/voice/presets")
+async def get_voice_presets():
+    """
+    Returns available neural voice presets for Edge-TTS.
+    """
+    presets = [
+        {"id": "en-US-AnaNeural", "name": "Ana (Anime / Sweet Girl - English)", "lang": "en"},
+        {"id": "en-US-AvaNeural", "name": "Ava (Expressive / Friendly - English)", "lang": "en"},
+        {"id": "en-US-EmmaNeural", "name": "Emma (Warm & Gentle - English)", "lang": "en"},
+        {"id": "en-US-JennyNeural", "name": "Jenny (Youthful & Cheerful - English)", "lang": "en"},
+        {"id": "ja-JP-NanamiNeural", "name": "Nanami (七海 - Anime Female - Japanese)", "lang": "ja"},
+        {"id": "ja-JP-AoiNeural", "name": "Aoi (葵 - Energetic Female - Japanese)", "lang": "ja"},
+        {"id": "ja-JP-KeitaNeural", "name": "Keita (圭太 - Male - Japanese)", "lang": "ja"},
+        {"id": "en-US-GuyNeural", "name": "Guy (Male Companion - English)", "lang": "en"},
+    ]
+    active_voice = config_mgr.get("tts", "voice_name", default="en-US-AnaNeural")
+    return {
+        "presets": presets,
+        "active_preset": active_voice
+    }
+
+
 @app.get("/api/config")
 async def get_config():
     return config_mgr.config
@@ -180,8 +203,18 @@ async def get_config():
 @app.post("/api/config")
 async def update_config(req: ConfigUpdateRequest):
     for k, v in req.settings.items():
-        config_mgr.config[k] = v
+        if isinstance(v, dict) and k in config_mgr.config and isinstance(config_mgr.config[k], dict):
+            config_mgr.config[k].update(v)
+        else:
+            config_mgr.config[k] = v
     config_mgr.save()
+
+    # Update fallback voice if changed
+    if "tts" in req.settings and isinstance(req.settings["tts"], dict) and "voice_name" in req.settings["tts"]:
+        voice_name = req.settings["tts"]["voice_name"]
+        if hasattr(tts_client, "fallback_tts"):
+            tts_client.fallback_tts.voice_name = voice_name
+
     return {"success": True, "config": config_mgr.config}
 
 

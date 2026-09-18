@@ -33,6 +33,15 @@ class TestTTSPipeline(unittest.TestCase):
         self.assertIn("ih", first_frame["visemes"])
         self.assertIn("ou", first_frame["visemes"])
 
+    def test_edge_tts_client_instance(self):
+        from backend.tts import EdgeTTSClient, CosyVoiceTTSClient
+        client = EdgeTTSClient(voice_name="en-US-AnaNeural")
+        self.assertEqual(client.voice_name, "en-US-AnaNeural")
+        
+        cosy = CosyVoiceTTSClient()
+        self.assertTrue(hasattr(cosy, "fallback_tts"))
+        self.assertIsInstance(cosy.fallback_tts, EdgeTTSClient)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -24,12 +24,73 @@ class BaseTTSClient:
         raise NotImplementedError
 
 
+class EdgeTTSClient(BaseTTSClient):
+    """
+    Microsoft Edge Neural TTS Client.
+    Generates high-quality human/anime speech in real-time with pitch & emotion inflection.
+    """
+    def __init__(self, voice_name: str = "en-US-AnaNeural", rate: str = "+0%", pitch: str = "+0Hz"):
+        self.voice_name = voice_name
+        self.rate = rate
+        self.pitch = pitch
+
+    def synthesize(
+        self,
+        text: str,
+        emotion: str = "neutral",
+        voice_reference_path: Optional[str] = None,
+    ) -> bytes:
+        import asyncio
+        import edge_tts
+        import soundfile as sf
+        import concurrent.futures
+
+        # Adjust pitch and rate subtly by emotion
+        pitch = self.pitch
+        rate = self.rate
+        if emotion in ["happy", "smile"]:
+            pitch = "+4Hz"
+            rate = "+4%"
+        elif emotion in ["sad", "thinking"]:
+            pitch = "-4Hz"
+            rate = "-6%"
+        elif emotion in ["surprised"]:
+            pitch = "+8Hz"
+        elif emotion in ["shy", "blush"]:
+            pitch = "+3Hz"
+            rate = "-3%"
+
+        async def _synthesize():
+            comm = edge_tts.Communicate(text, self.voice_name, rate=rate, pitch=pitch)
+            mp3_bytes = b""
+            async for chunk in comm.stream():
+                if chunk["type"] == "audio":
+                    mp3_bytes += chunk["data"]
+            return mp3_bytes
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                mp3_data = executor.submit(lambda: asyncio.run(_synthesize())).result(timeout=10)
+
+            if mp3_data:
+                audio_data, sr = sf.read(io.BytesIO(mp3_data))
+                out = io.BytesIO()
+                sf.write(out, audio_data, sr, format="WAV", subtype="PCM_16")
+                return out.getvalue()
+        except Exception as e:
+            print(f"[EdgeTTS] Warning: {e}")
+
+        return generate_mock_speech_wav(text)
+
+
 class CosyVoiceTTSClient(BaseTTSClient):
     """
     CosyVoice Client for zero-shot voice cloning with prompt audio and emotional inflection.
+    Falls back to EdgeTTSClient (real neural speech) if local CosyVoice server is not running.
     """
     def __init__(self, api_url: str = "http://127.0.0.1:50000"):
         self.api_url = api_url.rstrip("/")
+        self.fallback_tts = EdgeTTSClient()
 
     def synthesize(
         self,
@@ -43,27 +104,27 @@ class CosyVoiceTTSClient(BaseTTSClient):
         """
         import urllib.request
         import urllib.error
+        import json
 
         payload = {
             "tts_text": text,
-            "prompt_text": "",  # Optional transcription of prompt audio
+            "prompt_text": "",
             "prompt_wav": voice_reference_path or "",
             "emotion": emotion,
         }
         
-        # When calling local CosyVoice server
         try:
-            import json
             req = urllib.request.Request(
                 f"{self.api_url}/inference_zero_shot",
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=30) as response:
+            with urllib.request.urlopen(req, timeout=5) as response:
                 return response.read()
-        except Exception as e:
-            # Generate placeholder tone / audio buffer if server isn't running yet
-            return generate_mock_speech_wav(text)
+        except Exception:
+            # Fall back to real neural anime voice instead of flat sine wave
+            return self.fallback_tts.synthesize(text, emotion=emotion, voice_reference_path=voice_reference_path)
+
 
 
 class MockTTSClient(BaseTTSClient):

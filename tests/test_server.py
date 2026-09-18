@@ -157,6 +157,14 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertIn("Furina", data["system_prompt"])
         self.assertIn("[3D Avatar Emotion Rules]", data["system_prompt"])
 
+    def test_voice_presets_endpoint(self):
+        res = self.client.get("/api/voice/presets")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("presets", data)
+        self.assertIn("active_preset", data)
+        self.assertTrue(len(data["presets"]) >= 4)
+
 
 if __name__ == "__main__":
     unittest.main()
