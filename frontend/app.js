@@ -54,6 +54,7 @@ const systemPromptInput = document.getElementById("system-prompt-input");
 const savePromptBtn = document.getElementById("save-prompt-btn");
 const camFaceBtn = document.getElementById("cam-face-btn");
 const camBodyBtn = document.getElementById("cam-body-btn");
+const testBlinkBtn = document.getElementById("test-blink-btn");
 
 if (camFaceBtn) {
   camFaceBtn.onclick = () => {
@@ -66,6 +67,28 @@ if (camBodyBtn) {
   camBodyBtn.onclick = () => {
     camera.setTarget(new BABYLON.Vector3(0, 0.85, 0));
     camera.radius = 3.6;
+  };
+}
+
+function triggerManualBlink() {
+  const start = performance.now();
+  const duration = 240; // 240ms visible smooth blink
+  const animate = (now) => {
+    const elapsed = now - start;
+    if (elapsed < duration) {
+      const weight = Math.sin((elapsed / duration) * Math.PI);
+      setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], weight);
+      requestAnimationFrame(animate);
+    } else {
+      setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], 0);
+    }
+  };
+  requestAnimationFrame(animate);
+}
+
+if (testBlinkBtn) {
+  testBlinkBtn.onclick = () => {
+    triggerManualBlink();
   };
 }
 
@@ -129,20 +152,17 @@ function initBabylon() {
       activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - Math.sin(animTime * 1.8) * 0.01);
     }
 
-    // 4. Auto-Blink Controller (blinks every 3-5 seconds)
+    // 4. Auto-Blink Controller (blinks every 2.5 - 4.5 seconds with smooth curve)
     if (animTime - lastBlink > nextBlink) {
-      const blinkTarget = activeMorphTargets["まばたき"] || activeMorphTargets["blink"] || activeMorphTargets["eye_blink"];
-      if (blinkTarget) {
-        const progress = (animTime - lastBlink - nextBlink) / blinkDuration;
-        if (progress <= 0.5) {
-          blinkTarget.influence = progress * 2.0;
-        } else if (progress <= 1.0) {
-          blinkTarget.influence = (1.0 - progress) * 2.0;
-        } else {
-          blinkTarget.influence = 0;
-          lastBlink = animTime;
-          nextBlink = 3.0 + Math.random() * 2.5;
-        }
+      const elapsed = animTime - lastBlink - nextBlink;
+      const blinkDuration = 0.24; // 240ms visible natural blink
+      if (elapsed < blinkDuration) {
+        const blinkWeight = Math.sin((elapsed / blinkDuration) * Math.PI);
+        setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], blinkWeight);
+      } else {
+        setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], 0);
+        lastBlink = animTime;
+        nextBlink = 2.5 + Math.random() * 2.5; // Next blink in 2.5s - 5.0s
       }
     }
   });
@@ -234,20 +254,26 @@ async function loadCharacterModel(filename) {
       currentAnimationGroups = [];
     }
 
-    // Scan meshes for MorphTargetManager to drive visemes & emotions
+    // Scan all meshes for MorphTargetManager to drive visemes & emotions
+    activeMorphTargets = {};
     for (const mesh of result.meshes) {
       if (mesh.morphTargetManager) {
-        activeMorphTargetManager = mesh.morphTargetManager;
-        const count = activeMorphTargetManager.numTargets;
+        const mgr = mesh.morphTargetManager;
+        const count = mgr.numTargets;
         for (let i = 0; i < count; i++) {
-          const target = activeMorphTargetManager.getTarget(i);
-          activeMorphTargets[target.name] = target;
-          activeMorphTargets[target.name.toLowerCase()] = target;
+          const target = mgr.getTarget(i);
+          const raw = target.name.trim();
+          const lower = raw.toLowerCase();
+          if (!activeMorphTargets[raw]) activeMorphTargets[raw] = [];
+          activeMorphTargets[raw].push(target);
+          if (!activeMorphTargets[lower]) activeMorphTargets[lower] = [];
+          activeMorphTargets[lower].push(target);
         }
       }
     }
 
-    console.log(`[Avatar] Loaded ${filename} with ${Object.keys(activeMorphTargets).length} blendshapes`);
+    console.log(`[Avatar] Loaded ${filename} with ${Object.keys(activeMorphTargets).length} blendshapes across meshes`);
+    console.log("[Avatar] Available morph targets:", Object.keys(activeMorphTargets));
   } catch (err) {
     console.warn(`[Avatar] Could not load ${filename}, falling back to procedural avatar:`, err);
     buildProceduralAvatar();
@@ -329,6 +355,26 @@ function buildProceduralAvatar() {
   activeMorphTargets = { proceduralMouth: mouth };
 }
 
+// Universal Morph Target setter across all submeshes
+function setMorphInfluence(names, value) {
+  if (!Array.isArray(names)) names = [names];
+  for (const name of names) {
+    if (activeMorphTargets[name]) {
+      for (const t of activeMorphTargets[name]) {
+        t.influence = value;
+      }
+    }
+    const lower = name.toLowerCase();
+    for (const [k, targets] of Object.entries(activeMorphTargets)) {
+      if (k.includes(lower) || k.includes(name)) {
+        for (const t of targets) {
+          t.influence = value;
+        }
+      }
+    }
+  }
+}
+
 // --- 3. Real-time Viseme Lip-Sync & Emotion Blendshapes ---
 function applyVisemeFrame(frame) {
   const openness = frame.openness || 0;
@@ -343,19 +389,12 @@ function applyVisemeFrame(frame) {
   }
 
   // 2. If using GLB avatar: search for mouth / jaw / vowel targets
-  for (const [name, target] of Object.entries(activeMorphTargets)) {
-    if (name.includes("mouthopen") || name.includes("jawopen") || name.includes("mouth_open") || name.includes("viseme_aa")) {
-      target.influence = openness;
-    }
-  }
+  setMorphInfluence(["mouthopen", "jawopen", "mouth_open", "viseme_aa"], openness);
 
   // 3. MMD Japanese Visemes (あ / い / う / え / お)
-  const mmdA = activeMorphTargets["あ"] || activeMorphTargets["a"];
-  const mmdI = activeMorphTargets["い"] || activeMorphTargets["i"];
-  const mmdU = activeMorphTargets["う"] || activeMorphTargets["u"];
-  if (mmdA) mmdA.influence = openness * (frame.visemes?.aa !== undefined ? frame.visemes.aa : 0.85);
-  if (mmdI) mmdI.influence = openness * (frame.visemes?.ih !== undefined ? frame.visemes.ih : 0.3);
-  if (mmdU) mmdU.influence = openness * (frame.visemes?.ou !== undefined ? frame.visemes.ou : 0.3);
+  setMorphInfluence(["あ", "a"], openness * (frame.visemes?.aa !== undefined ? frame.visemes.aa : 0.85));
+  setMorphInfluence(["い", "i"], openness * (frame.visemes?.ih !== undefined ? frame.visemes.ih : 0.3));
+  setMorphInfluence(["う", "u"], openness * (frame.visemes?.ou !== undefined ? frame.visemes.ou : 0.3));
 }
 
 function applyEmotionBlendshape(emotion, blendshapes) {
@@ -368,29 +407,29 @@ function applyEmotionBlendshape(emotion, blendshapes) {
   const cleanEmotion = emotion.toLowerCase();
 
   // Reset temporary expression morphs
-  for (const [name, target] of Object.entries(activeMorphTargets)) {
+  for (const [name, targets] of Object.entries(activeMorphTargets)) {
     if (name.includes("smile") || name.includes("blush") || name.includes("happy") || name === "笑い" || name === "照れ" || name === "にこり" || name === "困り") {
-      target.influence = 0;
+      if (Array.isArray(targets)) {
+        for (const t of targets) t.influence = 0;
+      } else if (targets.influence !== undefined) {
+        targets.influence = 0;
+      }
     }
   }
 
   // Drive GLB emotion blendshapes if available
-  for (const [name, target] of Object.entries(activeMorphTargets)) {
-    if (name.includes(cleanEmotion) || (name.includes("smile") && cleanEmotion === "happy")) {
-      target.influence = 0.8;
-    }
-  }
+  setMorphInfluence([cleanEmotion], 0.8);
+  if (cleanEmotion === "happy") setMorphInfluence(["smile"], 0.8);
 
   // Drive MMD Japanese Emotion Morphs (Shiori Novella)
   if (cleanEmotion.includes("happy") || cleanEmotion.includes("smile")) {
-    if (activeMorphTargets["笑い"]) activeMorphTargets["笑い"].influence = 0.8;
-    if (activeMorphTargets["にこり"]) activeMorphTargets["にこり"].influence = 0.6;
+    setMorphInfluence(["笑い", "にこり"], 0.8);
   } else if (cleanEmotion.includes("blush") || cleanEmotion.includes("shy") || cleanEmotion.includes("tsundere")) {
-    if (activeMorphTargets["照れ"]) activeMorphTargets["照れ"].influence = 0.9;
+    setMorphInfluence(["照れ"], 0.9);
   } else if (cleanEmotion.includes("sad")) {
-    if (activeMorphTargets["困り"]) activeMorphTargets["困り"].influence = 0.7;
+    setMorphInfluence(["困り"], 0.7);
   } else if (cleanEmotion.includes("wink")) {
-    if (activeMorphTargets["ウィンク"]) activeMorphTargets["ウィンク"].influence = 1.0;
+    setMorphInfluence(["ウィンク"], 1.0);
   }
 }
 
