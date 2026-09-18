@@ -166,9 +166,30 @@ async def list_characters():
             "id": file_path.stem,
             "name": name,
             "file": fname,
+            "type": "glb",
             "description": desc,
             "size_mb": round(file_path.stat().st_size / (1024 * 1024), 1)
         })
+
+    # Discover MMD (.pmx) models (like Hololive Shiori Novella)
+    for file_path in chars_dir.rglob("*.pmx"):
+        rel_path = file_path.relative_to(chars_dir).as_posix()
+        char_name = file_path.stem
+        if "shiori" in char_name.lower():
+            char_name = "Shiori Novella (Hololive)"
+            desc = "Hololive English -Advent- Official 3D Model"
+        else:
+            desc = "MMD / PMX 3D Character Model"
+
+        available.append({
+            "id": file_path.stem,
+            "name": char_name,
+            "file": rel_path,
+            "type": "pmx",
+            "description": desc,
+            "size_mb": round(file_path.stat().st_size / (1024 * 1024), 1)
+        })
+
 
     active_char = config_mgr.get("avatar", "character_file", default="FNN-default_296.glb")
     return {

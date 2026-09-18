@@ -105,9 +105,13 @@ async function loadCharacterModel(filename) {
     return;
   }
 
-  // Load official DLP3D GLB character
+  // Load character (GLB or PMX)
   try {
-    const result = await BABYLON.SceneLoader.ImportMeshAsync("", "characters/", filename, scene);
+    const lastSlash = filename.lastIndexOf("/");
+    const rootUrl = lastSlash !== -1 ? "characters/" + filename.substring(0, lastSlash + 1) : "characters/";
+    const sceneFilename = lastSlash !== -1 ? filename.substring(lastSlash + 1) : filename;
+
+    const result = await BABYLON.SceneLoader.ImportMeshAsync("", rootUrl, sceneFilename, scene);
     loadedGlbMeshes = result.meshes;
 
     const rootMesh = result.meshes[0];

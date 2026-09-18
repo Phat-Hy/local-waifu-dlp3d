@@ -21,6 +21,8 @@
 | **STEP-009** | `2026-09-19T01:39:00+07:00` | Review | 14/14 automated unit & integration tests passing | **Completed** | `build-v1` |
 | **STEP-010** | `2026-09-19T01:43:00+07:00` | Build | Added official DLP3D character models (Furina, Hu Tao, Klee, Keqing, Nahida, Ani), `/api/characters` selector, and favicon | **Completed** | `avatar-models-v1` |
 | **STEP-011** | `2026-09-19T01:49:00+07:00` | Build | Implemented Character Personality & Emotion Auto-Generator via web search API (`backend/character_generator.py`) + UI search integration | **Completed** | `char-personality-gen-v1` |
+| **STEP-012** | `2026-09-19T02:02:00+07:00` | Build | Integrated official Hololive MMD (`.pmx`) model support via `babylon-mmd` and installed Shiori Novella 3D avatar | **Completed** | `shiori-novella-support` |
+
 
 
 
