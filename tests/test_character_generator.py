@@ -31,8 +31,8 @@ class TestCharacterGenerator(unittest.TestCase):
         res = generate_character_personality("Furina")
         self.assertTrue(res["success"])
         self.assertEqual(res["character_name"], "Furina")
-        self.assertIn("Furina", res["system_prompt"])
-        self.assertIn("[3D Avatar Emotion Rules]", res["system_prompt"])
+        self.assertIn("[3D Avatar Emotion & Gesture Rules]", res["system_prompt"])
+        self.assertIn("[gesture:wave]", res["system_prompt"])
 
 
 if __name__ == "__main__":

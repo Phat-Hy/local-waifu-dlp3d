@@ -52,6 +52,26 @@ class TestEmotionStreamProcessor(unittest.TestCase):
         self.assertEqual(sentences[2]["text"], "Did you miss me?")
         self.assertEqual(sentences[2]["emotion"], "blush")
 
+    def test_gesture_tag_extraction_and_cleaning(self):
+        processor = EmotionStreamProcessor()
+        tokens = [
+            "[happy][gesture:wave] Hello there! ",
+            "[shy][gesture:shy] It's nice to see you."
+        ]
+        sentences = []
+        for t in tokens:
+            sentences.extend(processor.process_token(t))
+        sentences.extend(processor.flush())
+
+        self.assertEqual(len(sentences), 2)
+        self.assertEqual(sentences[0]["text"], "Hello there!")
+        self.assertEqual(sentences[0]["emotion"], "happy")
+        self.assertEqual(sentences[0]["gesture"], "wave")
+
+        self.assertEqual(sentences[1]["text"], "It's nice to see you.")
+        self.assertEqual(sentences[1]["emotion"], "shy")
+        self.assertEqual(sentences[1]["gesture"], "shy")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -334,11 +334,77 @@ async def api_generate_personality(req: CharacterPersonalityRequest):
 
 
 
+def formulate_contextual_dialogue(user_text: str) -> List[str]:
+    txt = user_text.lower().strip()
+
+    # 1. Greetings (hello, hi, hey, morning, evening, sup, yo)
+    if any(w in txt for w in ["hello", "hi", "hey", "morning", "evening", "afternoon", "yo"]):
+        return [
+            "[happy][gesture:wave] Hello there! ",
+            "It's so wonderful to hear from you today. ",
+            "[smile][gesture:tilt] What exciting things shall we talk about?"
+        ]
+
+    # 2. Questions / Curiosity (why, what, how, who, when, where, ?, tell me, explain)
+    elif any(w in txt for w in ["why", "what", "how", "who", "when", "where", "?", "tell me", "explain"]):
+        return [
+            "[thinking][gesture:think] Hmm, that is such an intriguing question! ",
+            "[gesture:tilt] Let me ponder that for a moment... ",
+            f"[smile][gesture:nod] Regarding '{user_text}', I think there are many fascinating secrets to uncover together!"
+        ]
+
+    # 3. Flattery / Affection / Compliments (cute, pretty, beautiful, love, marry, like you, sweet, best girl)
+    elif any(w in txt for w in ["cute", "pretty", "beautiful", "love", "marry", "like you", "sweet", "adorable", "best girl"]):
+        return [
+            "[blush][gesture:shy] W-Wait, you're saying that so casually to my face?! ",
+            "[tsundere] Don't think you can fluster me that easily... ",
+            "[blush][gesture:tilt] But... thank you. You always know how to make my heart flutter."
+        ]
+
+    # 4. Praise / Gratitude (thank, thanks, awesome, great, amazing, good job, cool)
+    elif any(w in txt for w in ["thank", "thanks", "awesome", "great", "amazing", "good job", "cool", "nice"]):
+        return [
+            "[happy][gesture:excited] Really?! ",
+            "[smile][gesture:nod] Hearing that from you makes me so happy! ",
+            "[gesture:wave] I'll keep doing my absolute best for you!"
+        ]
+
+    # 5. Empathy / Sadness / Tired (sad, tired, lonely, bad day, sigh, stressed, cry, hurt)
+    elif any(w in txt for w in ["sad", "tired", "lonely", "bad day", "sigh", "stressed", "cry", "hurt", "depressed", "exhausted"]):
+        return [
+            "[sad][gesture:lean] Oh no... you've had a tough time, haven't you? ",
+            "[smile] Please don't carry all that stress alone. ",
+            "[blush][gesture:nod] I'm right here with you, and I'll keep you company until you feel better."
+        ]
+
+    # 6. Agreement / Affirmation (yes, yeah, right, agree, sure, ok, okay, absolutely)
+    elif any(w in txt for w in ["yes", "yeah", "yep", "right", "agree", "sure", "ok", "okay", "exactly"]):
+        return [
+            "[smile][gesture:nod] Exactly! I couldn't agree more with you. ",
+            "[happy][gesture:tilt] We really are on the same wavelength!"
+        ]
+
+    # 7. Disagreement / Playful Teasing (no, nope, stop, don't, disagree, wrong)
+    elif any(w in txt for w in ["no", "nope", "stop", "don't", "disagree", "wrong"]):
+        return [
+            "[tsundere][gesture:shrug] Hmph! Is that so? ",
+            "[smile][gesture:tilt] Well, maybe I enjoy teasing you just a little bit too much!"
+        ]
+
+    # 8. Natural Fallback Conversation
+    else:
+        return [
+            f"[happy][gesture:nod] I heard you say: '{user_text}'. ",
+            "[thinking][gesture:tilt] That definitely gives me something intriguing to think about. ",
+            "[smile][gesture:wave] Tell me more, I'm all ears!"
+        ]
+
+
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     """
     Bidirectional streaming WebSocket endpoint.
-    Feeds real-time audio chunks, visemes, and 3D blendshapes to the frontend.
+    Feeds real-time audio chunks, visemes, gestures, and 3D blendshapes to the frontend.
     """
     await websocket.accept()
     processor = EmotionStreamProcessor()
@@ -352,21 +418,12 @@ async def websocket_chat(websocket: WebSocket):
             if not user_text.strip():
                 continue
 
-            # Check if LLM endpoint or mock stream
-            # For immediate responsive interaction, generate speech packets
             prompt_voice = config_mgr.get("tts", "active_voice_path")
             
-            # Formulate response with emotion tags (using character rules)
-            mock_dialogue_stream = [
-                "[happy] Master, ",
-                "I heard you say: '",
-                user_text,
-                "'! ",
-                "[blush] I am so happy to chat with you today. ",
-                "[smile] Is there anything else you would like to do?"
-            ]
+            # Formulate smart, dynamic contextual response with emotion & gesture tags
+            dialogue_stream = formulate_contextual_dialogue(user_text)
 
-            for token in mock_dialogue_stream:
+            for token in dialogue_stream:
                 # Send raw token for real-time text subtitle display
                 await websocket.send_json({
                     "type": "token",
@@ -387,11 +444,12 @@ async def websocket_chat(websocket: WebSocket):
                     visemes = extract_audio_visemes(wav_bytes)
                     audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
 
-                    # Emit complete multimodel packet
+                    # Emit complete multimodal packet with dynamic gesture
                     await websocket.send_json({
                         "type": "audio_packet",
                         "text": s["text"],
                         "emotion": s["emotion"],
+                        "gesture": s.get("gesture", "none"),
                         "blendshapes": s["blendshapes"],
                         "visemes": visemes,
                         "audio_base64": audio_b64,
@@ -415,6 +473,7 @@ async def websocket_chat(websocket: WebSocket):
                     "type": "audio_packet",
                     "text": s["text"],
                     "emotion": s["emotion"],
+                    "gesture": s.get("gesture", "none"),
                     "blendshapes": s["blendshapes"],
                     "visemes": visemes,
                     "audio_base64": audio_b64,

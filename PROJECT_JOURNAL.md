@@ -26,6 +26,7 @@
 | **STEP-014** | `2026-09-19T02:26:00+07:00` | Build | Integrated Edge-TTS neural anime speech fallback (`EdgeTTSClient`) with emotion inflection & voice preset dropdown (`/api/voice/presets`) | **Completed** | `edge-tts-voice-support` |
 | **STEP-015** | `2026-09-19T02:31:00+07:00` | Build | Built 1-Click CosyVoice setup (`setup_cosyvoice.ps1`), standalone zero-shot server (`services/cosyvoice/server.py`), and unified auto-launch (`run.ps1`) | **Completed** | `cosyvoice-1click-runner` |
 | **STEP-016** | `2026-09-19T02:50:00+07:00` | Build | Added Procedural Idle Animation Engine (breathing, body sway, speech head nodding, auto-blink) and Japanese MMD visemes/emotions for Shiori Novella | **Completed** | `pmx-procedural-anim-engine` |
+| **STEP-017** | `2026-09-19T03:03:00+07:00` | Build | Implemented Contextual Conversation Gestures (wave, nod, tilt, think, shy, excited, shrug, lean), immediate 'think' pose on send, and multi-mesh blink fix | **Completed** | `conversation-gestures-v1` |
 
 
 

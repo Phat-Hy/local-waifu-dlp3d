@@ -155,7 +155,7 @@ class TestServerEndpoints(unittest.TestCase):
         data = res_valid.json()
         self.assertTrue(data["success"])
         self.assertIn("Furina", data["system_prompt"])
-        self.assertIn("[3D Avatar Emotion Rules]", data["system_prompt"])
+        self.assertIn("[3D Avatar Emotion & Gesture Rules]", data["system_prompt"])
 
     def test_voice_presets_endpoint(self):
         res = self.client.get("/api/voice/presets")

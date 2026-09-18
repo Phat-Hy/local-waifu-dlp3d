@@ -118,17 +118,33 @@ function initBabylon() {
   // Initial character load
   loadCharacterModel("FNN-default_296.glb");
 
-  // Procedural idle breathing, micro-swaying, head gestures & auto-blink loop
+  // Procedural idle breathing, micro-swaying, dynamic conversation gestures & auto-blink loop
   let animTime = 0;
   let lastBlink = 0;
   let nextBlink = 3.5;
-  const blinkDuration = 0.16;
+  const blinkDuration = 0.24;
+
+  let currentGesture = {
+    name: "none",
+    startTime: 0,
+    duration: 1.5
+  };
+
+  window.triggerGesture = function(gestureName) {
+    if (!gestureName || gestureName === "none") return;
+    console.log(`[Avatar] Conversation Gesture Triggered: ${gestureName}`);
+    currentGesture = {
+      name: gestureName.toLowerCase().trim(),
+      startTime: animTime,
+      duration: gestureName === "wave" ? 2.5 : (gestureName === "excited" ? 1.9 : 1.7)
+    };
+  };
 
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000.0;
     animTime += dt;
 
-    // 1. Natural Breathing & Spine Sway (MMD + GLB)
+    // 1. Natural Breathing & Spine Sway (Base idle layer)
     if (activeBones.chest || activeBones.spine) {
       const breath = Math.sin(animTime * 1.8) * 0.012;
       const sway = Math.cos(animTime * 0.75) * 0.008;
@@ -136,7 +152,7 @@ function initBabylon() {
       bone.rotation = new BABYLON.Vector3(breath, sway, 0);
     }
 
-    // 2. Subtle Head Tilt & Nodding (expressive during speech!)
+    // 2. Subtle Head Tilt & Nodding (Speech cadence)
     if (activeBones.head) {
       const speakingMod = isPlayingAudio ? 2.5 : 1.0;
       const headNod = Math.sin(animTime * (isPlayingAudio ? 4.2 : 1.1)) * (0.014 * speakingMod);
@@ -144,7 +160,7 @@ function initBabylon() {
       activeBones.head.rotation = new BABYLON.Vector3(headNod, 0, headTilt);
     }
 
-    // 3. Gentle Arm micro-sway (natural rest pose)
+    // 3. Natural Arm Rest & Sway
     if (activeBones.leftArm) {
       activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.92 + Math.sin(animTime * 1.8) * 0.01);
     }
@@ -152,10 +168,73 @@ function initBabylon() {
       activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - Math.sin(animTime * 1.8) * 0.01);
     }
 
-    // 4. Auto-Blink Controller (blinks every 2.5 - 4.5 seconds with smooth curve)
+    // 4. Dynamic Conversational Gesture Engine (Driven by what the user says!)
+    if (currentGesture.name !== "none") {
+      const gElapsed = animTime - currentGesture.startTime;
+      const gDuration = currentGesture.duration;
+
+      if (gElapsed < gDuration) {
+        const p = gElapsed / gDuration; // 0.0 -> 1.0 (smooth gesture curve)
+
+        // Wave: Greets user, arm raises and waves hand
+        if (currentGesture.name === "wave" && activeBones.rightArm) {
+          const armHeight = -0.4 - Math.sin(p * Math.PI) * 0.78;
+          const handWave = Math.sin(p * 20.0) * 0.28;
+          activeBones.rightArm.rotation = new BABYLON.Vector3(0, handWave, armHeight);
+          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(-0.02, -0.04, 0.03);
+        }
+        // Nod: Agrees emphatically with user
+        else if (currentGesture.name === "nod" && activeBones.head) {
+          const nodPitch = Math.sin(p * 12.0) * 0.055 * (1.0 - p * 0.4);
+          activeBones.head.rotation = new BABYLON.Vector3(nodPitch, 0, 0);
+          if (activeBones.chest) activeBones.chest.rotation = new BABYLON.Vector3(nodPitch * 0.35, 0, 0);
+        }
+        // Tilt: Inquisitive, curious head tilt
+        else if (currentGesture.name === "tilt" && activeBones.head) {
+          const tiltRoll = Math.sin(p * Math.PI) * 0.09;
+          activeBones.head.rotation = new BABYLON.Vector3(0.01, 0, tiltRoll);
+        }
+        // Think: Pondering user's question, looking up and away
+        else if (currentGesture.name === "think" && activeBones.head) {
+          const thinkPitch = -Math.sin(p * Math.PI) * 0.045;
+          const thinkYaw = Math.sin(p * Math.PI) * 0.05;
+          activeBones.head.rotation = new BABYLON.Vector3(thinkPitch, thinkYaw, 0.02);
+          if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.65);
+        }
+        // Shy: Flustered by compliment, looking down shyly
+        else if (currentGesture.name === "shy") {
+          const shyPitch = Math.sin(p * Math.PI) * 0.06;
+          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(shyPitch, 0, 0);
+          if (activeBones.leftArm) activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.72);
+          if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.72);
+        }
+        // Excited: Joyful bounce, laughing and cheerful
+        else if (currentGesture.name === "excited") {
+          const bounce = Math.abs(Math.sin(p * 14.0)) * 0.022;
+          if (activeBones.chest) activeBones.chest.rotation = new BABYLON.Vector3(-bounce * 0.6, 0, 0);
+          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(bounce * 0.9, 0, 0);
+        }
+        // Shrug: Lifting shoulders playfully
+        else if (currentGesture.name === "shrug") {
+          const shrug = Math.sin(p * Math.PI) * 0.065;
+          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(0, 0, shrug * 0.4);
+          if (activeBones.leftArm) activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.92 + shrug);
+          if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - shrug);
+        }
+        // Lean: Leans forward attentively toward camera
+        else if (currentGesture.name === "lean" && activeBones.spine) {
+          const leanPitch = Math.sin(p * Math.PI) * 0.05;
+          activeBones.spine.rotation = new BABYLON.Vector3(leanPitch, 0, 0);
+        }
+
+      } else {
+        currentGesture.name = "none";
+      }
+    }
+
+    // 5. Auto-Blink Controller (blinks every 2.5 - 4.5 seconds with smooth curve)
     if (animTime - lastBlink > nextBlink) {
       const elapsed = animTime - lastBlink - nextBlink;
-      const blinkDuration = 0.24; // 240ms visible natural blink
       if (elapsed < blinkDuration) {
         const blinkWeight = Math.sin((elapsed / blinkDuration) * Math.PI);
         setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], blinkWeight);
@@ -515,6 +594,9 @@ function connectWebSocket() {
       subtitleText.textContent += data.content;
     } else if (data.type === "audio_packet") {
       applyEmotionBlendshape(data.emotion, data.blendshapes);
+      if (data.gesture && data.gesture !== "none" && window.triggerGesture) {
+        window.triggerGesture(data.gesture);
+      }
       audioQueue.push(data);
       if (!isPlayingAudio) {
         playNextAudioChunk();
@@ -734,6 +816,9 @@ chatForm.onsubmit = (e) => {
 
   subtitleText.textContent = "";
   subtitleBox.classList.remove("hidden");
+  if (window.triggerGesture) {
+    window.triggerGesture("think");
+  }
   ws.send(JSON.stringify({ text: text }));
   chatInput.value = "";
 };

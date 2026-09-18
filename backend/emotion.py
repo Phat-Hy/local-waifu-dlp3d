@@ -65,8 +65,9 @@ EMOTION_BLENDSHAPES: Dict[str, Dict[str, float]] = {
     }
 }
 
-EMOTION_TAG_PATTERN = re.compile(r"\[([a-zA-Z0-9_\-]+)\]")
+EMOTION_TAG_PATTERN = re.compile(r"\[([a-zA-Z0-9_\-:]+)\]")
 SENTENCE_SPLIT_PATTERN = re.compile(r"([.!?~\n]+)")
+SUPPORTED_GESTURES = {"nod", "tilt", "wave", "think", "shy", "excited", "shrug", "lean", "laugh"}
 
 
 def get_blendshapes_for_emotion(emotion: str) -> Dict[str, float]:
@@ -77,7 +78,7 @@ def get_blendshapes_for_emotion(emotion: str) -> Dict[str, float]:
 class EmotionStreamProcessor:
     """
     Processes incoming text or token streams, tracking current emotional state,
-    stripping emotion tags for clean TTS audio, and yielding complete speakable sentences.
+    stripping emotion & gesture tags for clean TTS audio, and yielding complete speakable sentences.
     """
     def __init__(self, default_emotion: str = "neutral"):
         self.current_emotion = default_emotion
@@ -119,22 +120,32 @@ class EmotionStreamProcessor:
 
     def _extract_emotion_and_clean_text(self, raw_text: str) -> Dict[str, Any]:
         """
-        Detects any emotion tags in the sentence, updates self.current_emotion,
-        and returns cleaned text alongside blendshape data.
+        Detects any emotion and gesture tags in the sentence, updates self.current_emotion,
+        and returns cleaned text alongside blendshape and gesture data.
         """
-        detected_emotions = EMOTION_TAG_PATTERN.findall(raw_text)
-        if detected_emotions:
-            # Use the latest detected emotion tag
-            for tag in detected_emotions:
-                if tag.lower() in EMOTION_BLENDSHAPES:
-                    self.current_emotion = tag.lower()
+        detected_tags = EMOTION_TAG_PATTERN.findall(raw_text)
+        detected_gesture = "none"
+        if detected_tags:
+            for tag in detected_tags:
+                tag_lower = tag.lower().strip()
+                if tag_lower.startswith("gesture:"):
+                    g = tag_lower.split(":", 1)[1].strip()
+                    if g in SUPPORTED_GESTURES:
+                        detected_gesture = g
+                elif tag_lower in EMOTION_BLENDSHAPES:
+                    self.current_emotion = tag_lower
+                    if detected_gesture == "none" and tag_lower in SUPPORTED_GESTURES:
+                        detected_gesture = tag_lower
+                elif tag_lower in SUPPORTED_GESTURES:
+                    detected_gesture = tag_lower
 
-        # Remove bracketed tags from the spoken text so TTS doesn't read "[happy]" out loud
+        # Remove bracketed tags from the spoken text so TTS doesn't read tags out loud
         cleaned_text = EMOTION_TAG_PATTERN.sub("", raw_text).strip()
 
         return {
             "text": cleaned_text,
             "raw": raw_text,
             "emotion": self.current_emotion,
+            "gesture": detected_gesture,
             "blendshapes": get_blendshapes_for_emotion(self.current_emotion),
         }
