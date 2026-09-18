@@ -127,7 +127,21 @@ class TestServerEndpoints(unittest.TestCase):
         if test_file.exists():
             test_file.unlink()
 
+    def test_generate_personality_endpoint(self):
+        # Invalid empty input
+        res_empty = self.client.post("/api/character/generate_personality", json={"character_name": "  "})
+        self.assertEqual(res_empty.status_code, 400)
+
+        # Valid input
+        res_valid = self.client.post("/api/character/generate_personality", json={"character_name": "Furina"})
+        self.assertEqual(res_valid.status_code, 200)
+        data = res_valid.json()
+        self.assertTrue(data["success"])
+        self.assertIn("Furina", data["system_prompt"])
+        self.assertIn("[3D Avatar Emotion Rules]", data["system_prompt"])
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

@@ -107,7 +107,15 @@
         <!-- Character Personality Section -->
         <section class="settings-section">
           <h3>Personality & Emotion System Prompt</h3>
-          <textarea id="system-prompt-input" rows="5"></textarea>
+          <p class="desc">Search the internet to auto-generate authentic character personality, lore, and emotion tags</p>
+          
+          <div class="voice-picker-box" style="margin-bottom: 12px;">
+            <input type="text" id="auto-char-name-input" placeholder="Character name (e.g. Furina, Hu Tao, Rem...)" />
+            <button id="auto-gen-prompt-btn" class="action-btn primary" style="white-space: nowrap; margin-bottom: 0;">✨ Auto-Generate</button>
+          </div>
+          <div id="gen-prompt-status" class="status-msg" style="margin-bottom: 8px;"></div>
+
+          <textarea id="system-prompt-input" rows="7"></textarea>
           <button id="save-prompt-btn" class="action-btn">Save Prompt</button>
         </section>
       </div>

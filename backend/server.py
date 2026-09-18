@@ -214,6 +214,28 @@ async def select_character(req: CharacterSelectRequest):
     return {"success": True, "active_character": req.character_file}
 
 
+from backend.character_generator import generate_character_personality
+
+
+class CharacterPersonalityRequest(BaseModel):
+    character_name: str
+
+
+@app.post("/api/character/generate_personality")
+async def api_generate_personality(req: CharacterPersonalityRequest):
+    """
+    Searches online knowledge for character personality/lore and builds a 3D avatar system prompt.
+    """
+    result = generate_character_personality(req.character_name)
+    if not result.get("success"):
+        raise HTTPException(status_code=400, detail=result.get("error", "Generation failed"))
+
+    # Auto-save generated prompt into active config
+    config_mgr.set("llm", "system_prompt", result["system_prompt"])
+    return result
+
+
+
 
 
 @app.websocket("/ws/chat")

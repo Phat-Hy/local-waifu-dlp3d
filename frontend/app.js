@@ -481,6 +481,49 @@ savePromptBtn.onclick = async () => {
   alert("System prompt saved!");
 };
 
+// --- Character Lore & Personality Auto-Generator ---
+const autoCharNameInput = document.getElementById("auto-char-name-input");
+const autoGenPromptBtn = document.getElementById("auto-gen-prompt-btn");
+const genPromptStatus = document.getElementById("gen-prompt-status");
+
+if (autoGenPromptBtn && autoCharNameInput) {
+  autoGenPromptBtn.onclick = async () => {
+    const charName = autoCharNameInput.value.trim();
+    if (!charName) {
+      alert("Please enter a character name first.");
+      return;
+    }
+
+    genPromptStatus.className = "status-msg";
+    genPromptStatus.textContent = `🔍 Searching internet for '${charName}' lore & synthesizing personality...`;
+    autoGenPromptBtn.disabled = true;
+
+    try {
+      const res = await fetch("/api/character/generate_personality", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ character_name: charName }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        systemPromptInput.value = data.system_prompt;
+        genPromptStatus.className = "status-msg success";
+        genPromptStatus.textContent = `✓ Generated & saved personality for ${data.character_name}! (Source: ${data.matched_title || 'Web Lore'})`;
+      } else {
+        genPromptStatus.className = "status-msg error";
+        genPromptStatus.textContent = `✗ ${data.detail || "Failed to generate personality."}`;
+      }
+    } catch (err) {
+      genPromptStatus.className = "status-msg error";
+      genPromptStatus.textContent = `✗ Error: ${err.message}`;
+    } finally {
+      autoGenPromptBtn.disabled = false;
+    }
+  };
+}
+
+
 // --- Custom Model Import & Drag-and-Drop ---
 const uploadCharBtn = document.getElementById("upload-char-btn");
 const charFileInput = document.getElementById("char-file-input");
