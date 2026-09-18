@@ -94,26 +94,39 @@ async def inference_zero_shot(req: ZeroShotRequest):
     if not req.tts_text.strip():
         raise HTTPException(status_code=400, detail="Text is required")
 
-    if not req.prompt_wav or not os.path.exists(req.prompt_wav):
-        raise HTTPException(status_code=400, detail=f"Reference audio not found: {req.prompt_wav}")
-
-    if cosyvoice_model is None:
-        raise HTTPException(
-            status_code=503,
-            detail=f"CosyVoice model not loaded. {model_load_error or 'Weights missing.'}"
-        )
+    prompt_path = req.prompt_wav
+    # CosyVoice requires prompt audio to be under 30 seconds (ideal: 5-15s)
+    try:
+        import soundfile as sf
+        info = sf.info(prompt_path)
+        if info.duration > 25.0:
+            trimmed_name = f"trimmed_{Path(prompt_path).stem[:30]}.wav"
+            trimmed_path = str(Path(prompt_path).parent / trimmed_name)
+            if not os.path.exists(trimmed_path):
+                data, sr = sf.read(prompt_path)
+                sf.write(trimmed_path, data[:sr * 12], sr)
+            prompt_path = trimmed_path
+    except Exception as e:
+        print(f"[CosyVoice Server] Notice during audio inspection: {e}")
 
     try:
         import torch
         import torchaudio
 
-        # Run inference zero-shot
-        output_generator = cosyvoice_model.inference_zero_shot(
-            req.tts_text,
-            req.prompt_text or "",
-            req.prompt_wav,
-            stream=False
-        )
+        # If prompt_text is provided, use zero-shot; otherwise cross_lingual voice cloning
+        if req.prompt_text and req.prompt_text.strip():
+            output_generator = cosyvoice_model.inference_zero_shot(
+                req.tts_text,
+                req.prompt_text.strip(),
+                prompt_path,
+                stream=False
+            )
+        else:
+            output_generator = cosyvoice_model.inference_cross_lingual(
+                req.tts_text,
+                prompt_path,
+                stream=False
+            )
 
         # Collect audio tensor
         audio_chunks = []

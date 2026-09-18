@@ -123,12 +123,12 @@ class CosyVoiceTTSClient(BaseTTSClient):
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=15) as response:
+            with urllib.request.urlopen(req, timeout=90) as response:
                 audio_data = response.read()
                 if audio_data and len(audio_data) > 100:
                     return audio_data
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[CosyVoice Client] Notice (falling back to Edge-TTS): {e}")
 
         # Fall back to real neural anime voice instead of flat sine wave
         return self.fallback_tts.synthesize(text, emotion=emotion, voice_reference_path=voice_reference_path)
