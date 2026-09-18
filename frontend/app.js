@@ -1,13 +1,16 @@
 /**
  * Local AI Waifu Frontend Client (DLP3D / Babylon.js)
  * Coordinates 3D avatar rendering, real-time viseme lip-sync,
- * WebSocket chat streaming, and dynamic model & voice selection.
+ * WebSocket chat streaming, and dynamic model, voice & character selection.
  */
 
 // --- Global State ---
 let scene, camera, engine;
 let avatarMesh = null;
-let morphTargets = {};
+let loadedGlbMeshes = [];
+let activeMorphTargets = {};
+let activeMorphTargetManager = null;
+let currentCharacterFile = null;
 let ws = null;
 let audioQueue = [];
 let isPlayingAudio = false;
@@ -38,6 +41,7 @@ const emotionTag = document.getElementById("emotion-tag");
 const settingsDrawer = document.getElementById("settings-drawer");
 const openSettingsBtn = document.getElementById("open-settings-btn");
 const closeSettingsBtn = document.getElementById("close-settings-btn");
+const charactersList = document.getElementById("characters-list");
 const scanModelsBtn = document.getElementById("scan-models-btn");
 const modelsList = document.getElementById("models-list");
 const voicePathInput = document.getElementById("voice-path-input");
@@ -53,20 +57,21 @@ function initBabylon() {
   scene.clearColor = new BABYLON.Color4(0.06, 0.07, 0.1, 1.0);
 
   // Camera focused on character's face & upper body
-  camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2.3, 3.2, new BABYLON.Vector3(0, 0.9, 0), scene);
+  camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2.2, 2.5, new BABYLON.Vector3(0, 1.35, 0), scene);
   camera.attachControl(canvas, true);
-  camera.lowerRadiusLimit = 1.5;
-  camera.upperRadiusLimit = 6.0;
+  camera.lowerRadiusLimit = 1.0;
+  camera.upperRadiusLimit = 5.0;
 
   // Soft anime lighting
   const hemiLight = new BABYLON.HemisphericLight("HemiLight", new BABYLON.Vector3(0, 1, 0), scene);
-  hemiLight.intensity = 0.75;
-  hemiLight.diffuse = new BABYLON.Color3(1, 0.95, 0.98);
+  hemiLight.intensity = 0.85;
+  hemiLight.diffuse = new BABYLON.Color3(1, 0.96, 0.98);
 
   const dirLight = new BABYLON.DirectionalLight("DirLight", new BABYLON.Vector3(-1, -1, 1), scene);
-  dirLight.intensity = 0.6;
+  dirLight.intensity = 0.7;
 
-  buildProceduralAvatar();
+  // Initial character load
+  loadCharacterModel("FNN-default_296.glb");
 
   engine.runRenderLoop(() => {
     scene.render();
@@ -77,9 +82,63 @@ function initBabylon() {
   });
 }
 
-// Procedural anime avatar head with real-time morph targets for visemes & expressions
+// --- 2. 3D Character Model Loader (GLB / DLP3D / Procedural) ---
+async function loadCharacterModel(filename) {
+  currentCharacterFile = filename;
+  
+  // Clean up any previously loaded meshes
+  if (loadedGlbMeshes.length > 0) {
+    loadedGlbMeshes.forEach(m => m.dispose());
+    loadedGlbMeshes = [];
+  }
+  if (avatarMesh) {
+    avatarMesh.dispose();
+    avatarMesh = null;
+  }
+  activeMorphTargets = {};
+  activeMorphTargetManager = null;
+
+  if (filename === "procedural") {
+    buildProceduralAvatar();
+    camera.setTarget(new BABYLON.Vector3(0, 1.0, 0));
+    camera.radius = 2.8;
+    return;
+  }
+
+  // Load official DLP3D GLB character
+  try {
+    const result = await BABYLON.SceneLoader.ImportMeshAsync("", "characters/", filename, scene);
+    loadedGlbMeshes = result.meshes;
+
+    const rootMesh = result.meshes[0];
+    rootMesh.position = new BABYLON.Vector3(0, 0, 0);
+
+    // Adjust camera target to character head height (~1.35m)
+    camera.setTarget(new BABYLON.Vector3(0, 1.35, 0));
+    camera.radius = 2.4;
+
+    // Scan meshes for MorphTargetManager to drive visemes & emotions
+    for (const mesh of result.meshes) {
+      if (mesh.morphTargetManager) {
+        activeMorphTargetManager = mesh.morphTargetManager;
+        const count = activeMorphTargetManager.numTargets;
+        for (let i = 0; i < count; i++) {
+          const target = activeMorphTargetManager.getTarget(i);
+          const name = target.name.toLowerCase();
+          activeMorphTargets[name] = target;
+        }
+      }
+    }
+
+    console.log(`[Avatar] Loaded ${filename} with ${Object.keys(activeMorphTargets).length} blendshapes`);
+  } catch (err) {
+    console.warn(`[Avatar] Could not load ${filename}, falling back to procedural avatar:`, err);
+    buildProceduralAvatar();
+  }
+}
+
+// Procedural anime avatar head fallback
 function buildProceduralAvatar() {
-  // Head sphere
   avatarMesh = BABYLON.MeshBuilder.CreateSphere("avatarHead", { diameter: 1.0, segments: 32 }, scene);
   avatarMesh.position.y = 1.0;
 
@@ -88,7 +147,6 @@ function buildProceduralAvatar() {
   skinMat.specularColor = new BABYLON.Color3(0.1, 0.1, 0.1);
   avatarMesh.material = skinMat;
 
-  // Eyes
   const eyeMat = new BABYLON.StandardMaterial("eyeMat", scene);
   eyeMat.diffuseColor = new BABYLON.Color3(0.5, 0.2, 0.8);
 
@@ -102,7 +160,6 @@ function buildProceduralAvatar() {
   rightEye.material = eyeMat;
   rightEye.parent = avatarMesh;
 
-  // Mouth mesh for viseme lip-sync
   const mouthMat = new BABYLON.StandardMaterial("mouthMat", scene);
   mouthMat.diffuseColor = new BABYLON.Color3(0.85, 0.3, 0.4);
 
@@ -111,70 +168,60 @@ function buildProceduralAvatar() {
   mouth.material = mouthMat;
   mouth.parent = avatarMesh;
 
-  // Hair bangs
   const hairMat = new BABYLON.StandardMaterial("hairMat", scene);
   hairMat.diffuseColor = new BABYLON.Color3(0.9, 0.35, 0.6);
-  hairMat.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
-
   const hair = BABYLON.MeshBuilder.CreateSphere("hair", { diameterX: 1.08, diameterY: 1.08, diameterZ: 1.05 }, scene);
   hair.position = new BABYLON.Vector3(0, 1.1, -0.05);
   hair.material = hairMat;
   hair.parent = avatarMesh;
 
-  // Set references
-  morphTargets = {
-    mouthMesh: mouth,
-    leftEye: leftEye,
-    rightEye: rightEye,
-    currentEmotion: "neutral",
-  };
-
-  // Subtle idle breathing animation
-  scene.registerBeforeRender(() => {
-    const time = performance.now() * 0.002;
-    avatarMesh.position.y = 1.0 + Math.sin(time) * 0.015;
-    avatarMesh.rotation.y = Math.sin(time * 0.5) * 0.04;
-  });
+  activeMorphTargets = { proceduralMouth: mouth };
 }
 
-// --- 2. Real-time Viseme Lip-Sync & Emotion Blendshapes ---
+// --- 3. Real-time Viseme Lip-Sync & Emotion Blendshapes ---
 function applyVisemeFrame(frame) {
-  if (!morphTargets.mouthMesh) return;
   const openness = frame.openness || 0;
-  // Scale mouth plane based on viseme intensity
-  const scaleY = Math.max(0.3, openness * 3.2);
-  const scaleX = 1.0 + (frame.visemes?.aa || 0) * 0.8;
-  morphTargets.mouthMesh.scaling.y = scaleY;
-  morphTargets.mouthMesh.scaling.x = scaleX;
+
+  // 1. If using procedural avatar
+  if (activeMorphTargets.proceduralMouth) {
+    const scaleY = Math.max(0.3, openness * 3.2);
+    const scaleX = 1.0 + (frame.visemes?.aa || 0) * 0.8;
+    activeMorphTargets.proceduralMouth.scaling.y = scaleY;
+    activeMorphTargets.proceduralMouth.scaling.x = scaleX;
+    return;
+  }
+
+  // 2. If using GLB avatar: search for mouth / jaw / vowel targets
+  for (const [name, target] of Object.entries(activeMorphTargets)) {
+    if (name.includes("mouthopen") || name.includes("jawopen") || name.includes("mouth_open") || name.includes("viseme_aa")) {
+      target.influence = openness;
+    }
+  }
 }
 
 function applyEmotionBlendshape(emotion, blendshapes) {
-  morphTargets.currentEmotion = emotion;
-
   // Update HUD badge
   const emoji = EMOTION_EMOJIS[emotion.toLowerCase()] || "🙂";
   emotionTag.querySelector(".emoji").textContent = emoji;
   emotionTag.querySelector(".label").textContent = emotion.toUpperCase();
   emotionTag.classList.remove("hidden");
 
-  // Subtle head tilt on emotion
-  if (emotion === "shy" || emotion === "blush") {
-    avatarMesh.rotation.z = 0.06;
-  } else if (emotion === "surprised") {
-    avatarMesh.rotation.x = -0.05;
-  } else {
-    avatarMesh.rotation.z = 0;
-    avatarMesh.rotation.x = 0;
+  // Drive GLB emotion blendshapes if available
+  const cleanEmotion = emotion.toLowerCase();
+  for (const [name, target] of Object.entries(activeMorphTargets)) {
+    if (name.includes(cleanEmotion) || name.includes("smile") && cleanEmotion === "happy") {
+      target.influence = 0.8;
+    }
   }
 }
 
-// --- 3. WebAudio Streaming Queue ---
+// --- 4. WebAudio Streaming Queue ---
 function playNextAudioChunk() {
   if (audioQueue.length === 0) {
     isPlayingAudio = false;
-    if (morphTargets.mouthMesh) {
-      morphTargets.mouthMesh.scaling.y = 0.5;
-      morphTargets.mouthMesh.scaling.x = 1.0;
+    if (activeMorphTargets.proceduralMouth) {
+      activeMorphTargets.proceduralMouth.scaling.y = 0.5;
+      activeMorphTargets.proceduralMouth.scaling.x = 1.0;
     }
     return;
   }
@@ -209,7 +256,6 @@ function playNextAudioChunk() {
         clearInterval(visemeInterval);
         return;
       }
-      // Find closest viseme frame
       const frame = visemes.find((f) => Math.abs(f.timestamp - elapsedSec) < 0.035);
       if (frame) {
         applyVisemeFrame(frame);
@@ -225,7 +271,7 @@ function playNextAudioChunk() {
   });
 }
 
-// --- 4. WebSocket Streaming Connection ---
+// --- 5. WebSocket Streaming Connection ---
 function connectWebSocket() {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl = `${protocol}//${window.location.hostname || "127.0.0.1"}:18002/ws/chat`;
@@ -255,15 +301,61 @@ function connectWebSocket() {
       if (!isPlayingAudio) {
         playNextAudioChunk();
       }
-    } else if (data.type === "done") {
-      setTimeout(() => {
-        // Keep subtitle visible for reading, fade out after a brief moment
-      }, 3000);
     }
   };
 }
 
-// --- 5. Settings Drawer & Model/Voice Operations ---
+// --- 6. Character, Model & Settings Operations ---
+async function fetchCharacters() {
+  try {
+    charactersList.innerHTML = `<div class="loading-spinner">Loading characters...</div>`;
+    const res = await fetch("/api/characters");
+    const data = await res.json();
+
+    charactersList.innerHTML = "";
+    
+    // Procedural fallback option
+    const procCard = document.createElement("div");
+    procCard.className = `model-card ${currentCharacterFile === "procedural" ? "active" : ""}`;
+    procCard.innerHTML = `
+      <div class="title">Anime Head (Procedural)</div>
+      <div class="details"><span>Lightweight zero-download</span></div>
+    `;
+    procCard.onclick = () => selectCharacter("procedural");
+    charactersList.appendChild(procCard);
+
+    data.characters.forEach((c) => {
+      const card = document.createElement("div");
+      card.className = `model-card ${c.file === currentCharacterFile ? "active" : ""}`;
+      card.innerHTML = `
+        <div class="title">${c.name}</div>
+        <div class="details">
+          <span>${c.description}</span>
+          <span>${c.size_mb} MB</span>
+        </div>
+      `;
+      card.onclick = () => selectCharacter(c.file);
+      charactersList.appendChild(card);
+    });
+  } catch (err) {
+    charactersList.innerHTML = `<p class="desc" style="color: #ff5252;">Failed to load characters: ${err.message}</p>`;
+  }
+}
+
+async function selectCharacter(charFile) {
+  try {
+    await fetch("/api/characters/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ character_file: charFile }),
+    });
+    await loadCharacterModel(charFile);
+    fetchCharacters();
+  } catch (err) {
+    alert("Error changing character: " + err.message);
+  }
+}
+
 async function fetchModels() {
   try {
     modelsList.innerHTML = `<div class="loading-spinner">Scanning directories...</div>`;
@@ -353,7 +445,7 @@ async function loadConfig() {
   }
 }
 
-// --- 6. Event Listeners ---
+// --- 7. Event Listeners ---
 chatForm.onsubmit = (e) => {
   e.preventDefault();
   const text = chatInput.value.trim();
@@ -367,6 +459,7 @@ chatForm.onsubmit = (e) => {
 
 openSettingsBtn.onclick = () => {
   settingsDrawer.classList.remove("hidden");
+  fetchCharacters();
   fetchModels();
   loadConfig();
 };

@@ -18,7 +18,9 @@
 | **STEP-006** | `2026-09-19T01:36:30+07:00` | Build | Implemented Emotion Parser & Sentence Streamer (`backend/emotion.py`, `backend/llm.py`) | **Completed** | `build-llm-engine` |
 | **STEP-007** | `2026-09-19T01:37:00+07:00` | Build | Implemented TTS layer & Audio Viseme Lip-Sync Preprocessor (`backend/tts.py`) | **Completed** | `build-tts` |
 | **STEP-008** | `2026-09-19T01:38:30+07:00` | Build | Implemented DLP3D Babylon.js 3D avatar viewport, WebAudio queue, & Settings Drawer (`frontend/`) | **Completed** | `build-frontend` |
-| **STEP-009** | `2026-09-19T01:39:00+07:00` | Review | 14/14 automated unit & integration tests passing; ready for `hs:code-review` | **Active** | `build-v1` |
+| **STEP-009** | `2026-09-19T01:39:00+07:00` | Review | 14/14 automated unit & integration tests passing | **Completed** | `build-v1` |
+| **STEP-010** | `2026-09-19T01:43:00+07:00` | Build | Added official DLP3D character models (Furina, Hu Tao, Klee, Keqing, Nahida, Ani), `/api/characters` selector, and favicon | **Completed** | `avatar-models-v1` |
+
 
 ---
 

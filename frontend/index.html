@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Local AI Waifu (DLP3D)</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="stylesheet" href="style.css">
   <!-- Babylon.js CDN for 3D Avatar Rendering -->
   <script src="https://cdn.babylonjs.com/babylon.js"></script>
@@ -68,6 +69,15 @@
       </div>
 
       <div class="drawer-content">
+        <!-- 3D Character Avatar Selection Section -->
+        <section class="settings-section">
+          <h3>3D Character Avatar (DLP3D)</h3>
+          <p class="desc">Select active 3D character mesh with rigging & blendshapes</p>
+          <div id="characters-list" class="item-list">
+            <div class="loading-spinner">Loading characters...</div>
+          </div>
+        </section>
+
         <!-- Model Selection Section -->
         <section class="settings-section">
           <h3>Local GGUF Models</h3>

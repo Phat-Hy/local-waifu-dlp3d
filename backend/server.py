@@ -140,6 +140,49 @@ async def update_config(req: ConfigUpdateRequest):
     return {"success": True, "config": config_mgr.config}
 
 
+class CharacterSelectRequest(BaseModel):
+    character_file: str
+
+
+@app.get("/api/characters")
+async def list_characters():
+    chars_dir = Path(__file__).parent.parent / "frontend" / "characters"
+    characters = [
+        {"id": "FNN", "name": "Furina", "file": "FNN-default_296.glb", "description": "Fontaine Hydro Archon"},
+        {"id": "HT", "name": "Hu Tao", "file": "HT-default_214.glb", "description": "77th Director of Wangsheng Funeral Parlor"},
+        {"id": "KL", "name": "Klee", "file": "KL-default_214.glb", "description": "Spark Knight of the Knights of Favonius"},
+        {"id": "KQ", "name": "Keqing", "file": "KQ-default_420.glb", "description": "Yuheng of the Liyue Qixing"},
+        {"id": "NXD", "name": "Nahida", "file": "NXD-default_321.glb", "description": "Lesser Lord Kusanali"},
+        {"id": "Ani", "name": "Ani", "file": "Ani-default_481.glb", "description": "DLP3D Original Anime Character"},
+    ]
+    
+    # Check which files actually exist on disk
+    available = []
+    for c in characters:
+        file_path = chars_dir / c["file"]
+        if file_path.exists():
+            c["size_mb"] = round(file_path.stat().st_size / (1024 * 1024), 1)
+            available.append(c)
+
+    active_char = config_mgr.get("avatar", "character_file", default="FNN-default_296.glb")
+    return {
+        "characters": available,
+        "active_character": active_char,
+    }
+
+
+@app.post("/api/characters/select")
+async def select_character(req: CharacterSelectRequest):
+    chars_dir = Path(__file__).parent.parent / "frontend" / "characters"
+    target = chars_dir / req.character_file
+    if not target.exists() and req.character_file != "procedural":
+        raise HTTPException(status_code=400, detail=f"Character model not found: {req.character_file}")
+    
+    config_mgr.set("avatar", "character_file", req.character_file)
+    return {"success": True, "active_character": req.character_file}
+
+
+
 @app.websocket("/ws/chat")
 async def websocket_chat(websocket: WebSocket):
     """

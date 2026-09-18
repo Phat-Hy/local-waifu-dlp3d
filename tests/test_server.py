@@ -33,6 +33,19 @@ class TestServerEndpoints(unittest.TestCase):
         self.assertIn("models", data)
         self.assertIn("scan_directories", data)
 
+    def test_characters_endpoint(self):
+        response = self.client.get("/api/characters")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("characters", data)
+        self.assertIn("active_character", data)
+        
+        # Test character selection
+        res_sel = self.client.post("/api/characters/select", json={"character_file": "procedural"})
+        self.assertEqual(res_sel.status_code, 200)
+        self.assertEqual(res_sel.json()["active_character"], "procedural")
+
+
     def test_config_endpoints(self):
         # GET config
         res_get = self.client.get("/api/config")
