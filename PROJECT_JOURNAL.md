@@ -28,6 +28,7 @@
 | **STEP-016** | `2026-09-19T02:50:00+07:00` | Build | Added Procedural Idle Animation Engine (breathing, body sway, speech head nodding, auto-blink) and Japanese MMD visemes/emotions for Shiori Novella | **Completed** | `pmx-procedural-anim-engine` |
 | **STEP-017** | `2026-09-19T03:03:00+07:00` | Build | Implemented Contextual Conversation Gestures (wave, nod, tilt, think, shy, excited, shrug, lean), immediate 'think' pose on send, and multi-mesh blink fix | **Completed** | `conversation-gestures-v1` |
 | **STEP-018** | `2026-09-19T03:08:00+07:00` | Build | Implemented Real-Time Acoustic Speech Kinematics (60 FPS WebAudio FFT/RMS), Saccadic Gaze Aversion Engine, and Multi-Octave Fractal Biological Motion | **Completed** | `acoustic-speech-kinematics-v1` |
+| **STEP-019** | `2026-09-19T04:13:00+07:00` | Build | Complete CosyVoice zero-shot setup with PyTorch 2.3.1 CUDA, pyworld-prebuilt, whisper, onnxruntime, and full ~2.8GB CosyVoice-300M weights | **Completed** | `cosyvoice-setup-complete-v1` |
 
 
 

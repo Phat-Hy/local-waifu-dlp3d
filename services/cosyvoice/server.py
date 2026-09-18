@@ -30,6 +30,9 @@ model_load_error = None
 def init_model():
     global cosyvoice_model, model_load_error
     try:
+        repo_path = Path(__file__).parent / "CosyVoice"
+        if repo_path.exists() and str(repo_path) not in sys.path:
+            sys.path.insert(0, str(repo_path))
         import torch
         from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
         model_dir = Path(__file__).parent / "pretrained_models" / "CosyVoice-300M"
