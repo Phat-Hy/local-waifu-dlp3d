@@ -31,6 +31,7 @@
 | **STEP-019** | `2026-09-19T04:13:00+07:00` | Build | Complete CosyVoice zero-shot setup with PyTorch 2.3.1 CUDA, pyworld-prebuilt, whisper, onnxruntime, and full ~2.8GB CosyVoice-300M weights | **Completed** | `cosyvoice-setup-complete-v1` |
 | **STEP-020** | `2026-09-19T04:27:00+07:00` | Fix & Ship | CosyVoice long-audio auto-trimming (>25s -> 12s), cross-lingual zero-shot dispatch, timeout increase to 90s, and WeText local caching; verified live CUDA inference | **Completed** | `cosyvoice-live-cloning-v1` |
 | **STEP-021** | `2026-09-19T04:34:00+07:00` | Fix & Build | Replaced broken vector assignment with Quaternion Delta Engine (`setBoneEuler`), calibrated feminine standing A-pose, relaxed finger curls, contrapposto weight shifting, cervical dual-joint articulation, and secondary hair/ribbon spring lag | **Completed** | `shiori-human-motion-engine-v1` |
+| **STEP-022** | `2026-09-19T04:40:00+07:00` | Fix & Polish | Fixed uncanny/creepy smile: prevented 4x stacked laughing mouth morphs, isolated viseme 'あ'/'い' from '笑い口', added gentle smiling eyes ('なごみ'), soft brows ('まゆにこり'), delicate corner lift ('口角上げ'), and sweet blush ('照れ') | **Completed** | `sweet-anime-facial-expressions-v1` |
 
 
 

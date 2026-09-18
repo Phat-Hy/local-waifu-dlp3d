@@ -749,20 +749,29 @@ function buildProceduralAvatar() {
   activeMorphTargets = { proceduralMouth: mouth };
 }
 
-// Universal Morph Target setter across all submeshes
-function setMorphInfluence(names, value) {
+// Universal Morph Target setter across all submeshes with strict matching by default
+function setMorphInfluence(names, value, exact = true) {
   if (!Array.isArray(names)) names = [names];
   for (const name of names) {
     if (activeMorphTargets[name]) {
       for (const t of activeMorphTargets[name]) {
         t.influence = value;
       }
+      continue;
     }
     const lower = name.toLowerCase();
-    for (const [k, targets] of Object.entries(activeMorphTargets)) {
-      if (k.includes(lower) || k.includes(name)) {
-        for (const t of targets) {
-          t.influence = value;
+    if (activeMorphTargets[lower]) {
+      for (const t of activeMorphTargets[lower]) {
+        t.influence = value;
+      }
+      continue;
+    }
+    if (!exact) {
+      for (const [k, targets] of Object.entries(activeMorphTargets)) {
+        if (k.toLowerCase() === lower || k === name) {
+          for (const t of targets) {
+            t.influence = value;
+          }
         }
       }
     }
@@ -783,12 +792,12 @@ function applyVisemeFrame(frame) {
   }
 
   // 2. If using GLB avatar: search for mouth / jaw / vowel targets
-  setMorphInfluence(["mouthopen", "jawopen", "mouth_open", "viseme_aa"], openness);
+  setMorphInfluence(["mouthopen", "jawopen", "mouth_open", "viseme_aa"], openness, false);
 
-  // 3. MMD Japanese Visemes (あ / い / う / え / お)
-  setMorphInfluence(["あ", "a"], openness * (frame.visemes?.aa !== undefined ? frame.visemes.aa : 0.85));
-  setMorphInfluence(["い", "i"], openness * (frame.visemes?.ih !== undefined ? frame.visemes.ih : 0.3));
-  setMorphInfluence(["う", "u"], openness * (frame.visemes?.ou !== undefined ? frame.visemes.ou : 0.3));
+  // 3. MMD Japanese Visemes (あ / い / う / え / お) - STRICT EXACT MATCHING ONLY!
+  setMorphInfluence(["あ"], openness * (frame.visemes?.aa !== undefined ? frame.visemes.aa : 0.75), true);
+  setMorphInfluence(["い"], openness * (frame.visemes?.ih !== undefined ? frame.visemes.ih : 0.25), true);
+  setMorphInfluence(["う"], openness * (frame.visemes?.ou !== undefined ? frame.visemes.ou : 0.25), true);
 }
 
 function applyEmotionBlendshape(emotion, blendshapes) {
@@ -800,30 +809,64 @@ function applyEmotionBlendshape(emotion, blendshapes) {
 
   const cleanEmotion = emotion.toLowerCase();
 
-  // Reset temporary expression morphs
-  for (const [name, targets] of Object.entries(activeMorphTargets)) {
-    if (name.includes("smile") || name.includes("blush") || name.includes("happy") || name === "笑い" || name === "照れ" || name === "にこり" || name === "困り") {
-      if (Array.isArray(targets)) {
-        for (const t of targets) t.influence = 0;
-      } else if (targets.influence !== undefined) {
-        targets.influence = 0;
-      }
-    }
+  // Cleanly reset ALL expression and mouth morphs so they never stack
+  const resetMorphs = [
+    "なごみ", "まゆにこり", "口角上げ", "にこり口", "笑い口", "笑い口2", "大笑い",
+    "照れ", "困り", "困る", "まゆ寄せ", "口幅小", "口角下げ", "びっくり", "ウィンク",
+    "怒り", "じと目", "はう", "キラキラ目", "白目", "青ざめ",
+    "化物口閉じ", "化物口開け", "化物まばたき", "化物右目閉", "化物左目閉",
+    "happy", "smile", "blush", "shy", "sad", "surprised", "thinking", "angry", "wink"
+  ];
+  for (const m of resetMorphs) {
+    setMorphInfluence(m, 0, true);
   }
 
-  // Drive GLB emotion blendshapes if available
-  setMorphInfluence([cleanEmotion], 0.8);
-  if (cleanEmotion === "happy") setMorphInfluence(["smile"], 0.8);
-
-  // Drive MMD Japanese Emotion Morphs (Shiori Novella)
+  // 1. Happy / Smile: Gentle, cute, sweet anime smile (no gaping horror mouth!)
   if (cleanEmotion.includes("happy") || cleanEmotion.includes("smile")) {
-    setMorphInfluence(["笑い", "にこり"], 0.8);
-  } else if (cleanEmotion.includes("blush") || cleanEmotion.includes("shy") || cleanEmotion.includes("tsundere")) {
-    setMorphInfluence(["照れ"], 0.9);
-  } else if (cleanEmotion.includes("sad")) {
-    setMorphInfluence(["困り"], 0.7);
-  } else if (cleanEmotion.includes("wink")) {
-    setMorphInfluence(["ウィンク"], 1.0);
+    setMorphInfluence("なごみ", 0.52, true);       // Warm, gentle squinting happy anime eyes (^ ^)
+    setMorphInfluence("まゆにこり", 0.50, true);   // Soft smiling curved eyebrows
+    setMorphInfluence("口角上げ", 0.35, true);     // Subtle, graceful lifted corners of the mouth
+    setMorphInfluence("照れ", 0.28, true);         // Soft rosy cheek blush
+    setMorphInfluence(["happy", "smile"], 0.6, true);
+  }
+  // 2. Blush / Shy / Tsundere: Sweet bashful warmth
+  else if (cleanEmotion.includes("blush") || cleanEmotion.includes("shy") || cleanEmotion.includes("tsundere")) {
+    setMorphInfluence("照れ", 0.72, true);         // Cute prominent cheek blush
+    setMorphInfluence("まゆにこり", 0.35, true);   // Soft brows
+    setMorphInfluence("口角上げ", 0.25, true);     // Shy gentle smile
+    setMorphInfluence("なごみ", 0.30, true);       // Soft bashful eyes
+    setMorphInfluence(["blush", "shy"], 0.7, true);
+  }
+  // 3. Thinking: Curious, gentle thoughtful expression
+  else if (cleanEmotion.includes("thinking") || cleanEmotion.includes("think")) {
+    setMorphInfluence("まゆ寄せ", 0.28, true);     // Soft thoughtful brow
+    setMorphInfluence("口幅小", 0.20, true);       // Delicate parted lips
+    setMorphInfluence(["thinking"], 0.5, true);
+  }
+  // 4. Sad / Concerned: Sympathetic, gentle sadness
+  else if (cleanEmotion.includes("sad")) {
+    setMorphInfluence("困る", 0.45, true);
+    setMorphInfluence("困り", 0.45, true);         // Soft worried brows
+    setMorphInfluence("口角下げ", 0.28, true);     // Subtle downturned lips
+    setMorphInfluence(["sad"], 0.5, true);
+  }
+  // 5. Surprised: Cute wide-eyed anime wonder
+  else if (cleanEmotion.includes("surprised")) {
+    setMorphInfluence("びっくり", 0.42, true);     // Wide curious eyes
+    setMorphInfluence("口幅小", 0.30, true);       // Cute small 'o' mouth
+    setMorphInfluence(["surprised"], 0.5, true);
+  }
+  // 6. Wink: Charming, flirty anime wink
+  else if (cleanEmotion.includes("wink")) {
+    setMorphInfluence("ウィンク", 0.85, true);     // One eye closed
+    setMorphInfluence("口角上げ", 0.35, true);     // Playful smile
+    setMorphInfluence("照れ", 0.25, true);         // Soft blush
+    setMorphInfluence(["wink"], 0.8, true);
+  }
+  // 7. Neutral: Relaxed, pleasant resting expression
+  else {
+    setMorphInfluence("口角上げ", 0.10, true);     // Warm resting smile (never gloomy or deadpan)
+    setMorphInfluence("まゆにこり", 0.12, true);   // Relaxed brows
   }
 }
 
