@@ -33,6 +33,9 @@ def init_model():
         repo_path = Path(__file__).parent / "CosyVoice"
         if repo_path.exists() and str(repo_path) not in sys.path:
             sys.path.insert(0, str(repo_path))
+        matcha_path = repo_path / "third_party" / "Matcha-TTS"
+        if matcha_path.exists() and str(matcha_path) not in sys.path:
+            sys.path.insert(0, str(matcha_path))
         import torch
         from cosyvoice.cli.cosyvoice import CosyVoice, CosyVoice2
         model_dir = Path(__file__).parent / "pretrained_models" / "CosyVoice-300M"
