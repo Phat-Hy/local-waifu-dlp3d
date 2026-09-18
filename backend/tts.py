@@ -106,10 +106,14 @@ class CosyVoiceTTSClient(BaseTTSClient):
         import urllib.error
         import json
 
+        wav_path = voice_reference_path or ""
+        if wav_path and not os.path.isabs(wav_path):
+            wav_path = str(Path(wav_path).resolve())
+
         payload = {
             "tts_text": text,
             "prompt_text": "",
-            "prompt_wav": voice_reference_path or "",
+            "prompt_wav": wav_path,
             "emotion": emotion,
         }
         
@@ -119,11 +123,15 @@ class CosyVoiceTTSClient(BaseTTSClient):
                 data=json.dumps(payload).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=5) as response:
-                return response.read()
+            with urllib.request.urlopen(req, timeout=15) as response:
+                audio_data = response.read()
+                if audio_data and len(audio_data) > 100:
+                    return audio_data
         except Exception:
-            # Fall back to real neural anime voice instead of flat sine wave
-            return self.fallback_tts.synthesize(text, emotion=emotion, voice_reference_path=voice_reference_path)
+            pass
+
+        # Fall back to real neural anime voice instead of flat sine wave
+        return self.fallback_tts.synthesize(text, emotion=emotion, voice_reference_path=voice_reference_path)
 
 
 

@@ -36,3 +36,6 @@ _dlp3d_upstream/
 _dlp3d_orchestrator/
 voices/*
 !voices/.gitkeep
+services/cosyvoice/venv/
+services/cosyvoice/pretrained_models/
+services/cosyvoice/CosyVoice/
