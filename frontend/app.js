@@ -10,13 +10,28 @@ let avatarMesh = null;
 let loadedGlbMeshes = [];
 let activeMorphTargets = {};
 let activeMorphTargetManager = null;
-let activeBones = { spine: null, chest: null, neck: null, head: null, leftArm: null, rightArm: null };
+let activeBones = { spine: null, chest: null, neck: null, head: null, leftArm: null, rightArm: null, leftEye: null, rightEye: null };
 let currentAnimationGroups = [];
 let currentCharacterFile = null;
 let ws = null;
 let audioQueue = [];
 let isPlayingAudio = false;
 let audioContext = null;
+let audioAnalyser = null;
+let audioFreqData = null;
+let liveSpeechEnergy = 0.0;
+let liveSpeechPitchCentroid = 20.0;
+let lastSpeechEnergy = 0.0;
+let speechCadenceBeat = 0.0;
+
+let gazeState = {
+  currentX: 0.0,
+  currentY: 0.0,
+  targetX: 0.0,
+  targetY: 0.0,
+  nextSaccadeTime: 1.8,
+  lastSaccadeTime: 0.0,
+};
 
 const EMOTION_EMOJIS = {
   happy: "😊",
@@ -118,11 +133,11 @@ function initBabylon() {
   // Initial character load
   loadCharacterModel("FNN-default_296.glb");
 
-  // Procedural idle breathing, micro-swaying, dynamic conversation gestures & auto-blink loop
+  // --- Organic Kinematics, Acoustic Speech Coupling, Saccadic Gaze & Gesture State ---
   let animTime = 0;
   let lastBlink = 0;
-  let nextBlink = 3.5;
-  const blinkDuration = 0.24;
+  let nextBlink = 3.2;
+  const blinkDuration = 0.22;
 
   let currentGesture = {
     name: "none",
@@ -130,13 +145,20 @@ function initBabylon() {
     duration: 1.5
   };
 
+  // Multi-harmonic non-periodic fractal noise function for biological human motion
+  function organicHarmonic(t, speed, seed) {
+    return Math.sin(t * speed + seed) * 0.55
+         + Math.sin(t * (speed * 1.732) + seed * 1.41) * 0.3
+         + Math.sin(t * (speed * 3.141) + seed * 2.23) * 0.15;
+  }
+
   window.triggerGesture = function(gestureName) {
     if (!gestureName || gestureName === "none") return;
     console.log(`[Avatar] Conversation Gesture Triggered: ${gestureName}`);
     currentGesture = {
       name: gestureName.toLowerCase().trim(),
       startTime: animTime,
-      duration: gestureName === "wave" ? 2.5 : (gestureName === "excited" ? 1.9 : 1.7)
+      duration: gestureName === "wave" ? 2.6 : (gestureName === "excited" ? 2.0 : 1.8)
     };
   };
 
@@ -144,104 +166,184 @@ function initBabylon() {
     const dt = engine.getDeltaTime() / 1000.0;
     animTime += dt;
 
-    // 1. Natural Breathing & Spine Sway (Base idle layer)
+    // --- Layer A: Live Acoustic Audio Analysis (WebAudio 60 FPS FFT) ---
+    if (isPlayingAudio && audioAnalyser && audioFreqData) {
+      audioAnalyser.getByteFrequencyData(audioFreqData);
+      let sum = 0;
+      let weightedSum = 0;
+      for (let i = 0; i < audioFreqData.length; i++) {
+        const val = audioFreqData[i];
+        sum += val;
+        weightedSum += val * (i + 1);
+      }
+      const avg = sum / audioFreqData.length;
+      const targetEnergy = Math.min(1.0, (avg / 128.0) * 1.85);
+
+      // Fast attack, smooth decay
+      const attackSpeed = targetEnergy > liveSpeechEnergy ? 0.42 : 0.22;
+      liveSpeechEnergy += (targetEnergy - liveSpeechEnergy) * attackSpeed;
+
+      // Detect syllable transients
+      const energyDelta = targetEnergy - lastSpeechEnergy;
+      if (energyDelta > 0.11) {
+        speechCadenceBeat = Math.min(1.0, speechCadenceBeat + energyDelta * 1.6);
+      }
+      lastSpeechEnergy = targetEnergy;
+      speechCadenceBeat *= 0.88;
+
+      // Pitch / Spectral centroid
+      const centroid = sum > 15 ? (weightedSum / sum) : 20.0;
+      liveSpeechPitchCentroid += (centroid - liveSpeechPitchCentroid) * 0.2;
+    } else {
+      liveSpeechEnergy += (0 - liveSpeechEnergy) * 0.15;
+      speechCadenceBeat *= 0.85;
+      liveSpeechPitchCentroid += (20.0 - liveSpeechPitchCentroid) * 0.15;
+    }
+
+    // --- Layer B: Saccadic Gaze & Human Eye Wandering ---
+    if (animTime - gazeState.lastSaccadeTime > gazeState.nextSaccadeTime) {
+      gazeState.lastSaccadeTime = animTime;
+      gazeState.nextSaccadeTime = 1.1 + Math.random() * 2.2;
+
+      // Natural gaze aversion when formulating thoughts or speaking
+      if (currentGesture.name === "think" || (isPlayingAudio && Math.random() < 0.28)) {
+        gazeState.targetX = (Math.random() > 0.5 ? 0.05 : -0.05) + (Math.random() - 0.5) * 0.02;
+        gazeState.targetY = -0.035 - Math.random() * 0.035;
+      } else {
+        // Direct eye contact with micro-saccades between left eye, right eye & mouth
+        gazeState.targetX = (Math.random() - 0.5) * 0.026;
+        gazeState.targetY = (Math.random() - 0.5) * 0.02;
+      }
+    }
+    gazeState.currentX += (gazeState.targetX - gazeState.currentX) * 0.22;
+    gazeState.currentY += (gazeState.targetY - gazeState.currentY) * 0.22;
+
+    if (activeBones.leftEye) {
+      activeBones.leftEye.rotation = new BABYLON.Vector3(gazeState.currentY * 0.8, gazeState.currentX * 0.8, 0);
+    }
+    if (activeBones.rightEye) {
+      activeBones.rightEye.rotation = new BABYLON.Vector3(gazeState.currentY * 0.8, gazeState.currentX * 0.8, 0);
+    }
+
+    // --- Layer 1: Organic Multi-Octave Breathing & Torso Sway (Fractal Kinematics) ---
     if (activeBones.chest || activeBones.spine) {
-      const breath = Math.sin(animTime * 1.8) * 0.012;
-      const sway = Math.cos(animTime * 0.75) * 0.008;
+      const breathDepth = 0.012 + organicHarmonic(animTime, 0.28, 2.1) * 0.005;
+      const breathFreq = isPlayingAudio ? 2.1 : 1.55;
+      const breathPitch = Math.sin(animTime * breathFreq) * breathDepth;
+
+      const swayLateral = organicHarmonic(animTime, 0.48, 1.3) * 0.009;
+      const swayYaw = organicHarmonic(animTime, 0.32, 4.7) * 0.006;
+      const chestVocalLift = -liveSpeechEnergy * 0.018 - speechCadenceBeat * 0.012;
+
       const bone = activeBones.chest || activeBones.spine;
-      bone.rotation = new BABYLON.Vector3(breath, sway, 0);
+      bone.rotation = new BABYLON.Vector3(breathPitch + chestVocalLift, swayYaw, swayLateral);
     }
 
-    // 2. Subtle Head Tilt & Nodding (Speech cadence)
+    // --- Layer 2: Acoustic Speech Head Dynamics (Syllables, Pitch & Gaze) ---
     if (activeBones.head) {
-      const speakingMod = isPlayingAudio ? 2.5 : 1.0;
-      const headNod = Math.sin(animTime * (isPlayingAudio ? 4.2 : 1.1)) * (0.014 * speakingMod);
-      const headTilt = Math.cos(animTime * 0.65) * 0.01;
-      activeBones.head.rotation = new BABYLON.Vector3(headNod, 0, headTilt);
+      const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.032) + (speechCadenceBeat * 0.025);
+      const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0012 : 0;
+      const speechTilt = Math.sin(animTime * 2.3) * liveSpeechEnergy * 0.022;
+
+      const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.012;
+      const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.014;
+      const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.01;
+
+      activeBones.head.rotation = new BABYLON.Vector3(
+        idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.6,
+        idleHeadYaw + gazeState.currentX * 0.7,
+        idleHeadRoll + speechTilt
+      );
     }
 
-    // 3. Natural Arm Rest & Sway
-    if (activeBones.leftArm) {
-      activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.92 + Math.sin(animTime * 1.8) * 0.01);
+    // --- Layer 3: Dynamic Co-Speech Hand & Arm Phrasing ---
+    const armSpeechEnergy = liveSpeechEnergy * 0.16;
+    const armBreathSway = Math.sin(animTime * 1.55) * 0.012;
+
+    if (activeBones.leftArm && (!currentGesture || currentGesture.name === "none" || currentGesture.name === "wave" || currentGesture.name === "nod" || currentGesture.name === "tilt")) {
+      activeBones.leftArm.rotation = new BABYLON.Vector3(
+        liveSpeechEnergy * 0.05,
+        0,
+        -0.92 + armBreathSway + armSpeechEnergy
+      );
     }
-    if (activeBones.rightArm) {
-      activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - Math.sin(animTime * 1.8) * 0.01);
+    if (activeBones.rightArm && (!currentGesture || currentGesture.name === "none" || currentGesture.name === "nod" || currentGesture.name === "tilt")) {
+      activeBones.rightArm.rotation = new BABYLON.Vector3(
+        liveSpeechEnergy * 0.05,
+        0,
+        0.92 - armBreathSway - armSpeechEnergy
+      );
     }
 
-    // 4. Dynamic Conversational Gesture Engine (Driven by what the user says!)
+    // --- Layer 4: Contextual Conversational Gestures ---
     if (currentGesture.name !== "none") {
       const gElapsed = animTime - currentGesture.startTime;
       const gDuration = currentGesture.duration;
 
       if (gElapsed < gDuration) {
-        const p = gElapsed / gDuration; // 0.0 -> 1.0 (smooth gesture curve)
+        const rawP = gElapsed / gDuration;
+        const p = rawP * rawP * (3.0 - 2.0 * rawP); // Cubic Hermite smoothstep
 
-        // Wave: Greets user, arm raises and waves hand
         if (currentGesture.name === "wave" && activeBones.rightArm) {
-          const armHeight = -0.4 - Math.sin(p * Math.PI) * 0.78;
-          const handWave = Math.sin(p * 20.0) * 0.28;
+          const armHeight = -0.38 - Math.sin(p * Math.PI) * 0.82;
+          const handWave = Math.sin(p * 22.0) * 0.3;
           activeBones.rightArm.rotation = new BABYLON.Vector3(0, handWave, armHeight);
-          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(-0.02, -0.04, 0.03);
-        }
-        // Nod: Agrees emphatically with user
-        else if (currentGesture.name === "nod" && activeBones.head) {
-          const nodPitch = Math.sin(p * 12.0) * 0.055 * (1.0 - p * 0.4);
-          activeBones.head.rotation = new BABYLON.Vector3(nodPitch, 0, 0);
-          if (activeBones.chest) activeBones.chest.rotation = new BABYLON.Vector3(nodPitch * 0.35, 0, 0);
-        }
-        // Tilt: Inquisitive, curious head tilt
-        else if (currentGesture.name === "tilt" && activeBones.head) {
-          const tiltRoll = Math.sin(p * Math.PI) * 0.09;
-          activeBones.head.rotation = new BABYLON.Vector3(0.01, 0, tiltRoll);
-        }
-        // Think: Pondering user's question, looking up and away
-        else if (currentGesture.name === "think" && activeBones.head) {
-          const thinkPitch = -Math.sin(p * Math.PI) * 0.045;
-          const thinkYaw = Math.sin(p * Math.PI) * 0.05;
-          activeBones.head.rotation = new BABYLON.Vector3(thinkPitch, thinkYaw, 0.02);
+          if (activeBones.head) {
+            activeBones.head.rotation.x += -0.02;
+            activeBones.head.rotation.y += -0.04;
+            activeBones.head.rotation.z += 0.03;
+          }
+        } else if (currentGesture.name === "nod" && activeBones.head) {
+          const nodPitch = Math.sin(p * 14.0) * 0.065 * (1.0 - p * 0.4);
+          activeBones.head.rotation.x += nodPitch;
+          if (activeBones.chest) activeBones.chest.rotation.x += nodPitch * 0.4;
+        } else if (currentGesture.name === "tilt" && activeBones.head) {
+          const tiltRoll = Math.sin(p * Math.PI) * 0.11;
+          activeBones.head.rotation.z += tiltRoll;
+        } else if (currentGesture.name === "think" && activeBones.head) {
+          const thinkPitch = -Math.sin(p * Math.PI) * 0.055;
+          const thinkYaw = Math.sin(p * Math.PI) * 0.065;
+          activeBones.head.rotation.x += thinkPitch;
+          activeBones.head.rotation.y += thinkYaw;
           if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.65);
-        }
-        // Shy: Flustered by compliment, looking down shyly
-        else if (currentGesture.name === "shy") {
-          const shyPitch = Math.sin(p * Math.PI) * 0.06;
-          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(shyPitch, 0, 0);
+        } else if (currentGesture.name === "shy") {
+          const shyPitch = Math.sin(p * Math.PI) * 0.07;
+          if (activeBones.head) activeBones.head.rotation.x += shyPitch;
           if (activeBones.leftArm) activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.72);
           if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.72);
-        }
-        // Excited: Joyful bounce, laughing and cheerful
-        else if (currentGesture.name === "excited") {
-          const bounce = Math.abs(Math.sin(p * 14.0)) * 0.022;
-          if (activeBones.chest) activeBones.chest.rotation = new BABYLON.Vector3(-bounce * 0.6, 0, 0);
-          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(bounce * 0.9, 0, 0);
-        }
-        // Shrug: Lifting shoulders playfully
-        else if (currentGesture.name === "shrug") {
-          const shrug = Math.sin(p * Math.PI) * 0.065;
-          if (activeBones.head) activeBones.head.rotation = new BABYLON.Vector3(0, 0, shrug * 0.4);
+        } else if (currentGesture.name === "excited") {
+          const bounce = Math.abs(Math.sin(p * 15.0)) * 0.026;
+          if (activeBones.chest) activeBones.chest.rotation.x += -bounce * 0.7;
+          if (activeBones.head) activeBones.head.rotation.x += bounce * 1.0;
+        } else if (currentGesture.name === "shrug") {
+          const shrug = Math.sin(p * Math.PI) * 0.075;
+          if (activeBones.head) activeBones.head.rotation.z += shrug * 0.4;
           if (activeBones.leftArm) activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.92 + shrug);
           if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - shrug);
+        } else if (currentGesture.name === "lean" && activeBones.spine) {
+          const leanPitch = Math.sin(p * Math.PI) * 0.06;
+          activeBones.spine.rotation.x += leanPitch;
         }
-        // Lean: Leans forward attentively toward camera
-        else if (currentGesture.name === "lean" && activeBones.spine) {
-          const leanPitch = Math.sin(p * Math.PI) * 0.05;
-          activeBones.spine.rotation = new BABYLON.Vector3(leanPitch, 0, 0);
-        }
-
       } else {
         currentGesture.name = "none";
       }
     }
 
-    // 5. Auto-Blink Controller (blinks every 2.5 - 4.5 seconds with smooth curve)
+    // --- Layer 5: Natural Human Blink Controller (Asymmetric Curve & Speech Punctuation) ---
     if (animTime - lastBlink > nextBlink) {
       const elapsed = animTime - lastBlink - nextBlink;
       if (elapsed < blinkDuration) {
-        const blinkWeight = Math.sin((elapsed / blinkDuration) * Math.PI);
+        // Fast close (first 35% of duration), slightly slower open (remaining 65%)
+        const t = elapsed / blinkDuration;
+        const blinkWeight = t < 0.35 
+          ? Math.sin((t / 0.35) * (Math.PI / 2))
+          : Math.cos(((t - 0.35) / 0.65) * (Math.PI / 2));
         setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], blinkWeight);
       } else {
         setMorphInfluence(["まばたき", "blink", "eye_blink", "eyeblink"], 0);
         lastBlink = animTime;
-        nextBlink = 2.5 + Math.random() * 2.5; // Next blink in 2.5s - 5.0s
+        // Blinks occur every 2.4s to 4.8s
+        nextBlink = 2.4 + Math.random() * 2.4;
       }
     }
   });
@@ -387,6 +489,10 @@ function relaxArmBones(result) {
         activeBones.neck = bone;
       } else if (name === "頭" || lower.includes("head")) {
         activeBones.head = bone;
+      } else if (name === "左目" || lower.includes("eye_l") || lower.includes("eye.l")) {
+        activeBones.leftEye = bone;
+      } else if (name === "右目" || lower.includes("eye_r") || lower.includes("eye.r")) {
+        activeBones.rightEye = bone;
       }
     }
   }
@@ -530,6 +636,13 @@ function playNextAudioChunk() {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
   }
 
+  if (!audioAnalyser) {
+    audioAnalyser = audioContext.createAnalyser();
+    audioAnalyser.fftSize = 256;
+    audioAnalyser.smoothingTimeConstant = 0.6;
+    audioFreqData = new Uint8Array(audioAnalyser.frequencyBinCount);
+  }
+
   // Convert base64 WAV to ArrayBuffer
   const binaryString = atob(packet.audio_base64);
   const len = binaryString.length;
@@ -541,7 +654,8 @@ function playNextAudioChunk() {
   audioContext.decodeAudioData(bytes.buffer, (audioBuffer) => {
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
+    source.connect(audioAnalyser);
+    audioAnalyser.connect(audioContext.destination);
 
     // Synchronize viseme timeline with audio playback
     const startTime = performance.now();
