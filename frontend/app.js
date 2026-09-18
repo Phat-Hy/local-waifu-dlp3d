@@ -49,6 +49,23 @@ const setVoiceBtn = document.getElementById("set-voice-btn");
 const voiceStatus = document.getElementById("voice-status");
 const systemPromptInput = document.getElementById("system-prompt-input");
 const savePromptBtn = document.getElementById("save-prompt-btn");
+const camFaceBtn = document.getElementById("cam-face-btn");
+const camBodyBtn = document.getElementById("cam-body-btn");
+
+if (camFaceBtn) {
+  camFaceBtn.onclick = () => {
+    camera.setTarget(new BABYLON.Vector3(0, 1.35, 0));
+    camera.radius = 1.9;
+  };
+}
+
+if (camBodyBtn) {
+  camBodyBtn.onclick = () => {
+    camera.setTarget(new BABYLON.Vector3(0, 0.85, 0));
+    camera.radius = 3.6;
+  };
+}
+
 
 // --- 1. Initialize Babylon.js 3D Viewport ---
 function initBabylon() {
@@ -59,8 +76,10 @@ function initBabylon() {
   // Camera focused on character's face & upper body
   camera = new BABYLON.ArcRotateCamera("Camera", -Math.PI / 2, Math.PI / 2.2, 2.5, new BABYLON.Vector3(0, 1.35, 0), scene);
   camera.attachControl(canvas, true);
-  camera.lowerRadiusLimit = 1.0;
-  camera.upperRadiusLimit = 5.0;
+  camera.lowerRadiusLimit = 0.5;
+  camera.upperRadiusLimit = 25.0;
+  camera.wheelPrecision = 40;
+  camera.panningSensibility = 800; // Right-click or Ctrl+drag to pan anywhere smoothly
 
   // Soft anime lighting
   const hemiLight = new BABYLON.HemisphericLight("HemiLight", new BABYLON.Vector3(0, 1, 0), scene);
@@ -82,7 +101,7 @@ function initBabylon() {
   });
 }
 
-// --- 2. 3D Character Model Loader (GLB / DLP3D / Procedural) ---
+// --- 2. 3D Character Model Loader (GLB / DLP3D / PMX / Procedural) ---
 async function loadCharacterModel(filename) {
   currentCharacterFile = filename;
   
@@ -115,11 +134,38 @@ async function loadCharacterModel(filename) {
     loadedGlbMeshes = result.meshes;
 
     const rootMesh = result.meshes[0];
-    rootMesh.position = new BABYLON.Vector3(0, 0, 0);
 
-    // Adjust camera target to character head height (~1.35m)
+    // Compute bounding box across all loaded meshes to detect PMX vs GLB scale
+    let min = new BABYLON.Vector3(Infinity, Infinity, Infinity);
+    let max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
+
+    for (const m of result.meshes) {
+      if (m.getBoundingInfo && m.getTotalVertices && m.getTotalVertices() > 0) {
+        const b = m.getBoundingInfo().boundingBox;
+        min = BABYLON.Vector3.Minimize(min, b.minimumWorld);
+        max = BABYLON.Vector3.Maximize(max, b.maximumWorld);
+      }
+    }
+
+    const rawHeight = max.y - min.y;
+
+    // Normalization: MMD PMX models are ~15-20 units tall compared to GLB 1.6m
+    if (rawHeight > 3.0) {
+      const standardHeight = 1.6;
+      const scaleFactor = standardHeight / rawHeight;
+      rootMesh.scaling = new BABYLON.Vector3(scaleFactor, scaleFactor, scaleFactor);
+      rootMesh.position.y = -min.y * scaleFactor;
+      console.log(`[Avatar] Scaled PMX model height from ${rawHeight.toFixed(2)} to ${standardHeight}m (scaleFactor: ${scaleFactor.toFixed(4)})`);
+    } else {
+      rootMesh.position = new BABYLON.Vector3(0, 0, 0);
+    }
+
+    // Adjust camera target directly to character head height (~1.35m)
     camera.setTarget(new BABYLON.Vector3(0, 1.35, 0));
     camera.radius = 2.4;
+
+    // Relax horizontal T-Pose into natural standing pose
+    relaxArmBones(result);
 
     // Scan meshes for MorphTargetManager to drive visemes & emotions
     for (const mesh of result.meshes) {
@@ -140,6 +186,27 @@ async function loadCharacterModel(filename) {
     buildProceduralAvatar();
   }
 }
+
+// Relax T-Pose arms down into a natural standing rest pose
+function relaxArmBones(result) {
+  const skeletons = result.skeletons || [];
+  for (const sk of skeletons) {
+    for (const bone of sk.bones) {
+      const name = bone.name;
+      // Japanese MMD names: 左腕 (Left Arm), 右腕 (Right Arm)
+      if (name === "左腕" || name.toLowerCase().includes("arm_l") || name.toLowerCase().includes("upperarm.l")) {
+        bone.rotate(BABYLON.Axis.Z, -0.92, BABYLON.Space.LOCAL);
+      } else if (name === "右腕" || name.toLowerCase().includes("arm_r") || name.toLowerCase().includes("upperarm.r")) {
+        bone.rotate(BABYLON.Axis.Z, 0.92, BABYLON.Space.LOCAL);
+      } else if (name === "左ひじ" || name.toLowerCase().includes("elbow_l") || name.toLowerCase().includes("forearm.l")) {
+        bone.rotate(BABYLON.Axis.Y, 0.22, BABYLON.Space.LOCAL);
+      } else if (name === "右ひじ" || name.toLowerCase().includes("elbow_r") || name.toLowerCase().includes("forearm.r")) {
+        bone.rotate(BABYLON.Axis.Y, -0.22, BABYLON.Space.LOCAL);
+      }
+    }
+  }
+}
+
 
 // Procedural anime avatar head fallback
 function buildProceduralAvatar() {
