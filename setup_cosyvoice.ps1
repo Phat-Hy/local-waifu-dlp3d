@@ -62,7 +62,8 @@ if (-not (Test-Path $cosyRepoDir)) {
 $cosyReqs = Join-Path $cosyRepoDir "requirements.txt"
 if (Test-Path $cosyReqs) {
     Write-Host "Installing repository dependencies via UV..." -ForegroundColor Cyan
-    python -m uv pip install --python "$venvPython" -r $cosyReqs --index-strategy unsafe-best-match
+    python -m uv pip install --python "$venvPython" setuptools wheel
+    python -m uv pip install --python "$venvPython" -r $cosyReqs --index-strategy unsafe-best-match --no-build-isolation
 }
 
 # Download pretrained CosyVoice-300M weights via ModelScope / HuggingFace
