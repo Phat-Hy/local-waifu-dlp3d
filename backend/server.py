@@ -12,15 +12,17 @@ import json
 import base64
 import asyncio
 from pathlib import Path
+import shutil
 from typing import Dict, Any, List, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+
 from backend.config import ConfigManager
-from backend.scanner import scan_directory_for_models, validate_audio_file, parse_gguf_metadata
+from backend.scanner import scan_directory_for_models, validate_audio_file, parse_gguf_metadata, convert_audio_to_wav
 from backend.emotion import EmotionStreamProcessor
 from backend.tts import MockTTSClient, CosyVoiceTTSClient, extract_audio_visemes
 
@@ -114,17 +116,60 @@ async def select_model(req: ModelSelectRequest):
 @app.post("/api/voice/select")
 async def select_voice(req: VoiceSelectRequest):
     """
-    Validates and sets the user-chosen reference .wav file for voice cloning.
+    Validates and sets the user-chosen reference audio file (.wav, .flac, .mp3, etc.).
+    Converts non-wav formats (like .flac) to PCM WAV automatically.
     """
     val = validate_audio_file(req.voice_path)
     if not val.get("valid"):
         raise HTTPException(status_code=400, detail=val.get("error", "Invalid audio file"))
 
-    config_mgr.set("tts", "active_voice_path", req.voice_path)
+    final_path = req.voice_path
+    if not req.voice_path.lower().endswith(".wav"):
+        try:
+            final_path = convert_audio_to_wav(req.voice_path, destination_folder="voices")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to convert audio to WAV: {e}")
+
+    config_mgr.set("tts", "active_voice_path", final_path)
+    val["active_wav_path"] = final_path
     return {
         "success": True,
         "voice": val,
     }
+
+
+@app.post("/api/voice/upload")
+async def upload_voice(file: UploadFile = File(...)):
+    """
+    Accepts custom audio files uploaded from user's PC (.wav, .flac, .mp3, .ogg),
+    saves to voices/ folder, and converts to WAV if needed.
+    """
+    valid_exts = (".wav", ".flac", ".mp3", ".ogg", ".m4a")
+    if not file.filename.lower().endswith(valid_exts):
+        raise HTTPException(status_code=400, detail="Supported audio formats: .wav, .flac, .mp3, .ogg")
+
+    voices_dir = Path(__file__).parent.parent / "voices"
+    voices_dir.mkdir(parents=True, exist_ok=True)
+    temp_dest = voices_dir / file.filename
+
+    with open(temp_dest, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    final_path = str(temp_dest)
+    if not file.filename.lower().endswith(".wav"):
+        try:
+            final_path = convert_audio_to_wav(str(temp_dest), destination_folder=str(voices_dir))
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to convert uploaded audio: {e}")
+
+    config_mgr.set("tts", "active_voice_path", final_path)
+    return {
+        "success": True,
+        "filename": Path(final_path).name,
+        "path": final_path,
+        "original_filename": file.filename,
+    }
+
 
 
 @app.get("/api/config")
@@ -197,9 +242,6 @@ async def list_characters():
         "active_character": active_char,
     }
 
-
-from fastapi import UploadFile, File
-import shutil
 
 @app.post("/api/characters/upload")
 async def upload_character(file: UploadFile = File(...)):

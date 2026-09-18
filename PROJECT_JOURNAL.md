@@ -22,6 +22,8 @@
 | **STEP-010** | `2026-09-19T01:43:00+07:00` | Build | Added official DLP3D character models (Furina, Hu Tao, Klee, Keqing, Nahida, Ani), `/api/characters` selector, and favicon | **Completed** | `avatar-models-v1` |
 | **STEP-011** | `2026-09-19T01:49:00+07:00` | Build | Implemented Character Personality & Emotion Auto-Generator via web search API (`backend/character_generator.py`) + UI search integration | **Completed** | `char-personality-gen-v1` |
 | **STEP-012** | `2026-09-19T02:02:00+07:00` | Build | Integrated official Hololive MMD (`.pmx`) model support via `babylon-mmd` and installed Shiori Novella 3D avatar | **Completed** | `shiori-novella-support` |
+| **STEP-013** | `2026-09-19T02:18:00+07:00` | Build | Added PC audio file picker (`Choose Audio from PC...`), FLAC/MP3/OGG support, and auto-WAV conversion via `soundfile` | **Completed** | `audio-flac-upload-support` |
+
 
 
 

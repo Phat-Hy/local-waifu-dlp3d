@@ -79,6 +79,23 @@ class TestServerEndpoints(unittest.TestCase):
             if os.path.exists(valid_path):
                 os.remove(valid_path)
 
+    def test_voice_upload(self):
+        # Test valid audio file upload
+        res = self.client.post(
+            "/api/voice/upload",
+            files={"file": ("test_voice_upload.wav", b"RIFF" + b"\x00" * 40, "audio/wav")}
+        )
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["filename"], "test_voice_upload.wav")
+
+        # Clean up uploaded test file
+        test_file = Path(__file__).parent.parent / "voices" / "test_voice_upload.wav"
+        if test_file.exists():
+            test_file.unlink()
+
+
     def test_websocket_chat_streaming(self):
         with self.client.websocket_connect("/ws/chat") as ws:
             ws.send_json({"text": "Hello there waifu!"})

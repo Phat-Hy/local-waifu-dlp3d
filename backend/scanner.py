@@ -188,7 +188,7 @@ def scan_directory_for_models(directories: List[str], max_depth: int = 4) -> Lis
 
 def validate_audio_file(file_path: str) -> Dict[str, Any]:
     """
-    Validates a user-chosen voice reference audio file (.wav, .mp3, .flac).
+    Validates a user-chosen voice reference audio file (.wav, .mp3, .flac, .ogg).
     """
     p = Path(file_path)
     res = {
@@ -204,10 +204,34 @@ def validate_audio_file(file_path: str) -> Dict[str, Any]:
         return res
 
     res["size_bytes"] = p.stat().st_size
-    supported = ["wav", "mp3", "flac", "ogg"]
+    supported = ["wav", "mp3", "flac", "ogg", "m4a"]
     if res["format"] not in supported:
-        res["error"] = f"Unsupported audio format .{res['format']}. Recommended: .wav"
+        res["error"] = f"Unsupported audio format .{res['format']}. Supported: .wav, .flac, .mp3, .ogg"
         return res
 
     res["valid"] = True
     return res
+
+
+def convert_audio_to_wav(source_path: str, destination_folder: str = "voices") -> str:
+    """
+    Converts .flac, .mp3, .ogg or existing .wav to clean 16-bit PCM WAV in the destination folder.
+    """
+    p = Path(source_path)
+    dest_dir = Path(destination_folder)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    out_wav = dest_dir / f"{p.stem}.wav"
+
+    try:
+        import soundfile as sf
+        data, samplerate = sf.read(str(p))
+        sf.write(str(out_wav), data, samplerate, format="WAV", subtype="PCM_16")
+        return str(out_wav)
+    except Exception as e:
+        print(f"[AudioConverter] Warning during soundfile conversion: {e}")
+        if p.suffix.lower() == ".wav":
+            import shutil
+            shutil.copy2(p, out_wav)
+            return str(out_wav)
+        raise
+

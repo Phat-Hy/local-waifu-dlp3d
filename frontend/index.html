@@ -98,12 +98,17 @@
 
         <!-- Voice Reference Picker Section -->
         <section class="settings-section">
-          <h3>Voice Reference Audio (.wav)</h3>
-          <p class="desc">Select a 3-10s reference .wav audio clip to clone for CosyVoice</p>
+          <h3>Voice Reference Audio (.wav, .flac, .mp3)</h3>
+          <p class="desc">Select or upload a 3-10s voice clip from your PC to clone for CosyVoice</p>
           
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <button id="upload-voice-btn" class="action-btn primary" style="margin-bottom:0;">📁 Choose Audio from PC...</button>
+            <input type="file" id="voice-file-input" accept="audio/*,.wav,.flac,.mp3,.ogg,.m4a" style="display:none;" />
+          </div>
+
           <div class="voice-picker-box">
-            <input type="text" id="voice-path-input" placeholder="e.g. C:\Voices\waifu_sample.wav" />
-            <button id="set-voice-btn" class="action-btn primary">Apply Voice</button>
+            <input type="text" id="voice-path-input" placeholder="Or paste path (e.g. G:\Program\voicce\sample.flac)" />
+            <button id="set-voice-btn" class="action-btn">Apply Path</button>
           </div>
           <div id="voice-status" class="status-msg"></div>
         </section>

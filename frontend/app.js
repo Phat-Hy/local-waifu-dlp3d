@@ -474,12 +474,49 @@ async function selectModel(modelPath) {
   }
 }
 
+// --- Voice Reference Audio Picker & Upload ---
+const uploadVoiceBtn = document.getElementById("upload-voice-btn");
+const voiceFileInput = document.getElementById("voice-file-input");
+
+if (uploadVoiceBtn && voiceFileInput) {
+  uploadVoiceBtn.onclick = () => voiceFileInput.click();
+  voiceFileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    voiceStatus.className = "status-msg";
+    voiceStatus.textContent = `Uploading & converting ${file.name}...`;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/voice/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        voiceStatus.className = "status-msg success";
+        voiceStatus.textContent = `✓ Active voice reference set to: ${data.filename}`;
+        voicePathInput.value = data.path;
+      } else {
+        voiceStatus.className = "status-msg error";
+        voiceStatus.textContent = `✗ ${data.detail || "Upload failed"}`;
+      }
+    } catch (err) {
+      voiceStatus.className = "status-msg error";
+      voiceStatus.textContent = `✗ Error: ${err.message}`;
+    }
+  };
+}
+
 async function applyVoice() {
   const path = voicePathInput.value.trim();
   if (!path) return;
 
   voiceStatus.className = "status-msg";
-  voiceStatus.textContent = "Validating voice file...";
+  voiceStatus.textContent = "Validating & converting voice file...";
 
   try {
     const res = await fetch("/api/voice/select", {
@@ -490,7 +527,11 @@ async function applyVoice() {
     const data = await res.json();
     if (res.ok && data.success) {
       voiceStatus.className = "status-msg success";
-      voiceStatus.textContent = `✓ Active voice reference set to: ${data.voice.filename}`;
+      const finalName = data.voice.active_wav_path ? data.voice.active_wav_path.split(/[\\/]/).pop() : data.voice.filename;
+      voiceStatus.textContent = `✓ Active voice reference set to: ${finalName}`;
+      if (data.voice.active_wav_path) {
+        voicePathInput.value = data.voice.active_wav_path;
+      }
     } else {
       voiceStatus.className = "status-msg error";
       voiceStatus.textContent = `✗ ${data.detail || "Validation failed"}`;
@@ -500,6 +541,7 @@ async function applyVoice() {
     voiceStatus.textContent = `✗ Error: ${err.message}`;
   }
 }
+
 
 async function loadConfig() {
   try {
