@@ -24,6 +24,7 @@ node_modules/
 # Environment & credentials
 .env
 .env.local
+config.json
 *.pem
 credentials*
 

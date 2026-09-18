@@ -71,7 +71,8 @@ The system integrates:
   * Searching user-configured model directories (e.g., custom paths) for `.gguf` files.
   * Reading GGUF header metadata (tensor architecture, context length, quant type).
   * Listing available models with clean JSON payload for the UI menu.
-* Verification check: Unit test scanning directories and confirming model metadata extraction.
+  * **User File Browser / Picker**: Dedicated endpoint/dialog allowing the user to explicitly browse and choose their voice reference `.wav` file (supporting custom external directories) rather than relying on automatic directory scanning.
+* Verification check: Unit test scanning directories and confirming model metadata extraction and manual file selection.
 
 ### Step 3: Local LLM Engine with Emotion Extraction (`backend/llm.py`)
 * Wrap local GGUF loading using `llama-cpp-python` / `llama.cpp` server API.
@@ -84,8 +85,8 @@ The system integrates:
 * Integrate CosyVoice synthesis pipeline:
   * Takes text + emotion intensity tag.
   * Generates PCM/WAV audio stream.
-  * Allows passing a reference audio clip (3-5 seconds `.wav`) to clone character voice.
-* Verification check: Script generating a sample voice clip with emotional variation.
+  * Uses the user-selected reference audio clip (3-5 seconds `.wav`) to clone character voice.
+* Verification check: Script generating a sample voice clip with emotional variation using user-picked reference audio.
 
 ### Step 5: DLP3D Avatar Integration (`frontend/`)
 * Adapt DLP3D Babylon.js avatar renderer to run locally.
