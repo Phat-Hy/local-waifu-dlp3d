@@ -62,22 +62,24 @@ if (-not (Test-Path $cosyRepoDir)) {
 $cosyReqs = Join-Path $cosyRepoDir "requirements.txt"
 if (Test-Path $cosyReqs) {
     Write-Host "Installing repository dependencies via UV..." -ForegroundColor Cyan
-    python -m uv pip install --python "$venvPython" -r $cosyReqs
+    python -m uv pip install --python "$venvPython" -r $cosyReqs --index-strategy unsafe-best-match
 }
 
 # Download pretrained CosyVoice-300M weights via ModelScope / HuggingFace
 $pretrainedDir = Join-Path $serviceDir "pretrained_models\CosyVoice-300M"
-if (-not (Test-Path $pretrainedDir)) {
+$flowFile = Join-Path $pretrainedDir "flow.pt"
+$hiftFile = Join-Path $pretrainedDir "hift.pt"
+if (-not (Test-Path $flowFile) -or -not (Test-Path $hiftFile)) {
     Write-Host "Downloading CosyVoice-300M weights (~2.8GB)..." -ForegroundColor Cyan
     $env:HF_HUB_ENABLE_HF_TRANSFER = "1"
     & "$venvPython" -c "try:
-    from modelscope import snapshot_download
-    print('Downloading via ModelScope CDN...')
-    snapshot_download('iic/CosyVoice-300M', local_dir=r'$pretrainedDir')
-except Exception as e:
-    print('ModelScope notice:', e, 'Trying HuggingFace...')
     from huggingface_hub import snapshot_download
+    print('Downloading via HuggingFace Cloudflare CDN (multi-threaded)...')
     snapshot_download(repo_id='FunAudioLLM/CosyVoice-300M', local_dir=r'$pretrainedDir')
+except Exception as e:
+    print('HuggingFace notice:', e, 'Falling back to ModelScope...')
+    from modelscope import snapshot_download
+    snapshot_download('iic/CosyVoice-300M', local_dir=r'$pretrainedDir')
 "
 }
 
