@@ -10,6 +10,8 @@ let avatarMesh = null;
 let loadedGlbMeshes = [];
 let activeMorphTargets = {};
 let activeMorphTargetManager = null;
+let activeBones = { spine: null, chest: null, neck: null, head: null, leftArm: null, rightArm: null };
+let currentAnimationGroups = [];
 let currentCharacterFile = null;
 let ws = null;
 let audioQueue = [];
@@ -93,6 +95,58 @@ function initBabylon() {
   // Initial character load
   loadCharacterModel("FNN-default_296.glb");
 
+  // Procedural idle breathing, micro-swaying, head gestures & auto-blink loop
+  let animTime = 0;
+  let lastBlink = 0;
+  let nextBlink = 3.5;
+  const blinkDuration = 0.16;
+
+  scene.onBeforeRenderObservable.add(() => {
+    const dt = engine.getDeltaTime() / 1000.0;
+    animTime += dt;
+
+    // 1. Natural Breathing & Spine Sway (MMD + GLB)
+    if (activeBones.chest || activeBones.spine) {
+      const breath = Math.sin(animTime * 1.8) * 0.012;
+      const sway = Math.cos(animTime * 0.75) * 0.008;
+      const bone = activeBones.chest || activeBones.spine;
+      bone.rotation = new BABYLON.Vector3(breath, sway, 0);
+    }
+
+    // 2. Subtle Head Tilt & Nodding (expressive during speech!)
+    if (activeBones.head) {
+      const speakingMod = isPlayingAudio ? 2.5 : 1.0;
+      const headNod = Math.sin(animTime * (isPlayingAudio ? 4.2 : 1.1)) * (0.014 * speakingMod);
+      const headTilt = Math.cos(animTime * 0.65) * 0.01;
+      activeBones.head.rotation = new BABYLON.Vector3(headNod, 0, headTilt);
+    }
+
+    // 3. Gentle Arm micro-sway (natural rest pose)
+    if (activeBones.leftArm) {
+      activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.92 + Math.sin(animTime * 1.8) * 0.01);
+    }
+    if (activeBones.rightArm) {
+      activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - Math.sin(animTime * 1.8) * 0.01);
+    }
+
+    // 4. Auto-Blink Controller (blinks every 3-5 seconds)
+    if (animTime - lastBlink > nextBlink) {
+      const blinkTarget = activeMorphTargets["まばたき"] || activeMorphTargets["blink"] || activeMorphTargets["eye_blink"];
+      if (blinkTarget) {
+        const progress = (animTime - lastBlink - nextBlink) / blinkDuration;
+        if (progress <= 0.5) {
+          blinkTarget.influence = progress * 2.0;
+        } else if (progress <= 1.0) {
+          blinkTarget.influence = (1.0 - progress) * 2.0;
+        } else {
+          blinkTarget.influence = 0;
+          lastBlink = animTime;
+          nextBlink = 3.0 + Math.random() * 2.5;
+        }
+      }
+    }
+  });
+
   engine.runRenderLoop(() => {
     scene.render();
   });
@@ -168,6 +222,18 @@ async function loadCharacterModel(filename) {
     // Relax horizontal T-Pose into natural standing pose
     relaxArmBones(result);
 
+    // Autoplay embedded GLB animation groups (DLP3D avatars)
+    if (result.animationGroups && result.animationGroups.length > 0) {
+      currentAnimationGroups = result.animationGroups;
+      currentAnimationGroups.forEach(ag => {
+        ag.stop();
+        ag.play(true);
+      });
+      console.log(`[Avatar] Started ${result.animationGroups.length} embedded animation tracks.`);
+    } else {
+      currentAnimationGroups = [];
+    }
+
     // Scan meshes for MorphTargetManager to drive visemes & emotions
     for (const mesh of result.meshes) {
       if (mesh.morphTargetManager) {
@@ -175,8 +241,8 @@ async function loadCharacterModel(filename) {
         const count = activeMorphTargetManager.numTargets;
         for (let i = 0; i < count; i++) {
           const target = activeMorphTargetManager.getTarget(i);
-          const name = target.name.toLowerCase();
-          activeMorphTargets[name] = target;
+          activeMorphTargets[target.name] = target;
+          activeMorphTargets[target.name.toLowerCase()] = target;
         }
       }
     }
@@ -188,21 +254,34 @@ async function loadCharacterModel(filename) {
   }
 }
 
-// Relax T-Pose arms down into a natural standing rest pose
+// Relax T-Pose arms down into a natural standing rest pose and map skeleton bones
 function relaxArmBones(result) {
+  activeBones = { spine: null, chest: null, neck: null, head: null, leftArm: null, rightArm: null };
   const skeletons = result.skeletons || [];
   for (const sk of skeletons) {
     for (const bone of sk.bones) {
       const name = bone.name;
-      // Japanese MMD names: 左腕 (Left Arm), 右腕 (Right Arm)
-      if (name === "左腕" || name.toLowerCase().includes("arm_l") || name.toLowerCase().includes("upperarm.l")) {
+      const lower = name.toLowerCase();
+
+      // Japanese MMD names & standard bone names
+      if (name === "左腕" || lower.includes("arm_l") || lower.includes("upperarm.l")) {
+        activeBones.leftArm = bone;
         bone.rotate(BABYLON.Axis.Z, -0.92, BABYLON.Space.LOCAL);
-      } else if (name === "右腕" || name.toLowerCase().includes("arm_r") || name.toLowerCase().includes("upperarm.r")) {
+      } else if (name === "右腕" || lower.includes("arm_r") || lower.includes("upperarm.r")) {
+        activeBones.rightArm = bone;
         bone.rotate(BABYLON.Axis.Z, 0.92, BABYLON.Space.LOCAL);
-      } else if (name === "左ひじ" || name.toLowerCase().includes("elbow_l") || name.toLowerCase().includes("forearm.l")) {
+      } else if (name === "左ひじ" || lower.includes("elbow_l") || lower.includes("forearm.l")) {
         bone.rotate(BABYLON.Axis.Y, 0.22, BABYLON.Space.LOCAL);
-      } else if (name === "右ひじ" || name.toLowerCase().includes("elbow_r") || name.toLowerCase().includes("forearm.r")) {
+      } else if (name === "右ひじ" || lower.includes("elbow_r") || lower.includes("forearm.r")) {
         bone.rotate(BABYLON.Axis.Y, -0.22, BABYLON.Space.LOCAL);
+      } else if (name === "上半身" || lower.includes("spine")) {
+        activeBones.spine = bone;
+      } else if (name === "上半身2" || lower.includes("chest")) {
+        activeBones.chest = bone;
+      } else if (name === "首" || lower.includes("neck")) {
+        activeBones.neck = bone;
+      } else if (name === "頭" || lower.includes("head")) {
+        activeBones.head = bone;
       }
     }
   }
@@ -269,6 +348,14 @@ function applyVisemeFrame(frame) {
       target.influence = openness;
     }
   }
+
+  // 3. MMD Japanese Visemes (あ / い / う / え / お)
+  const mmdA = activeMorphTargets["あ"] || activeMorphTargets["a"];
+  const mmdI = activeMorphTargets["い"] || activeMorphTargets["i"];
+  const mmdU = activeMorphTargets["う"] || activeMorphTargets["u"];
+  if (mmdA) mmdA.influence = openness * (frame.visemes?.aa !== undefined ? frame.visemes.aa : 0.85);
+  if (mmdI) mmdI.influence = openness * (frame.visemes?.ih !== undefined ? frame.visemes.ih : 0.3);
+  if (mmdU) mmdU.influence = openness * (frame.visemes?.ou !== undefined ? frame.visemes.ou : 0.3);
 }
 
 function applyEmotionBlendshape(emotion, blendshapes) {
@@ -278,12 +365,32 @@ function applyEmotionBlendshape(emotion, blendshapes) {
   emotionTag.querySelector(".label").textContent = emotion.toUpperCase();
   emotionTag.classList.remove("hidden");
 
-  // Drive GLB emotion blendshapes if available
   const cleanEmotion = emotion.toLowerCase();
+
+  // Reset temporary expression morphs
   for (const [name, target] of Object.entries(activeMorphTargets)) {
-    if (name.includes(cleanEmotion) || name.includes("smile") && cleanEmotion === "happy") {
+    if (name.includes("smile") || name.includes("blush") || name.includes("happy") || name === "笑い" || name === "照れ" || name === "にこり" || name === "困り") {
+      target.influence = 0;
+    }
+  }
+
+  // Drive GLB emotion blendshapes if available
+  for (const [name, target] of Object.entries(activeMorphTargets)) {
+    if (name.includes(cleanEmotion) || (name.includes("smile") && cleanEmotion === "happy")) {
       target.influence = 0.8;
     }
+  }
+
+  // Drive MMD Japanese Emotion Morphs (Shiori Novella)
+  if (cleanEmotion.includes("happy") || cleanEmotion.includes("smile")) {
+    if (activeMorphTargets["笑い"]) activeMorphTargets["笑い"].influence = 0.8;
+    if (activeMorphTargets["にこり"]) activeMorphTargets["にこり"].influence = 0.6;
+  } else if (cleanEmotion.includes("blush") || cleanEmotion.includes("shy") || cleanEmotion.includes("tsundere")) {
+    if (activeMorphTargets["照れ"]) activeMorphTargets["照れ"].influence = 0.9;
+  } else if (cleanEmotion.includes("sad")) {
+    if (activeMorphTargets["困り"]) activeMorphTargets["困り"].influence = 0.7;
+  } else if (cleanEmotion.includes("wink")) {
+    if (activeMorphTargets["ウィンク"]) activeMorphTargets["ウィンク"].influence = 1.0;
   }
 }
 

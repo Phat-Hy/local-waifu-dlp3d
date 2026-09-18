@@ -25,6 +25,7 @@
 | **STEP-013** | `2026-09-19T02:18:00+07:00` | Build | Added PC audio file picker (`Choose Audio from PC...`), FLAC/MP3/OGG support, and auto-WAV conversion via `soundfile` | **Completed** | `audio-flac-upload-support` |
 | **STEP-014** | `2026-09-19T02:26:00+07:00` | Build | Integrated Edge-TTS neural anime speech fallback (`EdgeTTSClient`) with emotion inflection & voice preset dropdown (`/api/voice/presets`) | **Completed** | `edge-tts-voice-support` |
 | **STEP-015** | `2026-09-19T02:31:00+07:00` | Build | Built 1-Click CosyVoice setup (`setup_cosyvoice.ps1`), standalone zero-shot server (`services/cosyvoice/server.py`), and unified auto-launch (`run.ps1`) | **Completed** | `cosyvoice-1click-runner` |
+| **STEP-016** | `2026-09-19T02:50:00+07:00` | Build | Added Procedural Idle Animation Engine (breathing, body sway, speech head nodding, auto-blink) and Japanese MMD visemes/emotions for Shiori Novella | **Completed** | `pmx-procedural-anim-engine` |
 
 
 
