@@ -258,11 +258,12 @@ function initBabylon() {
     gazeState.currentX += (gazeState.targetX - gazeState.currentX) * 0.22;
     gazeState.currentY += (gazeState.targetY - gazeState.currentY) * 0.22;
 
-    if (activeBones.leftEye) {
-      setBoneEuler(activeBones.leftEye, gazeState.currentY * 0.75, gazeState.currentX * 0.75, 0);
+    // Keep eye pupils naturally centered and looking forward at user; head/neck handle natural conversational gaze
+    if (activeBones.leftEye && activeBones.leftEye._bindQuat) {
+      activeBones.leftEye.setRotationQuaternion(activeBones.leftEye._bindQuat.clone(), BABYLON.Space.LOCAL);
     }
-    if (activeBones.rightEye) {
-      setBoneEuler(activeBones.rightEye, gazeState.currentY * 0.75, gazeState.currentX * 0.75, 0);
+    if (activeBones.rightEye && activeBones.rightEye._bindQuat) {
+      activeBones.rightEye.setRotationQuaternion(activeBones.rightEye._bindQuat.clone(), BABYLON.Space.LOCAL);
     }
 
     // --- Layer 1: Organic Multi-Joint Respiration & Contrapposto Weight Shift ---
@@ -821,20 +822,18 @@ function applyEmotionBlendshape(emotion, blendshapes) {
     setMorphInfluence(m, 0, true);
   }
 
-  // 1. Happy / Smile: Gentle, cute, sweet anime smile (no gaping horror mouth!)
+  // 1. Happy / Smile: Sweet anime smile with natural, bright open eyes (no slit or creepy eye transformation!)
   if (cleanEmotion.includes("happy") || cleanEmotion.includes("smile")) {
-    setMorphInfluence("なごみ", 0.52, true);       // Warm, gentle squinting happy anime eyes (^ ^)
-    setMorphInfluence("まゆにこり", 0.50, true);   // Soft smiling curved eyebrows
+    setMorphInfluence("まゆにこり", 0.45, true);   // Soft smiling curved eyebrows
     setMorphInfluence("口角上げ", 0.35, true);     // Subtle, graceful lifted corners of the mouth
     setMorphInfluence("照れ", 0.28, true);         // Soft rosy cheek blush
     setMorphInfluence(["happy", "smile"], 0.6, true);
   }
-  // 2. Blush / Shy / Tsundere: Sweet bashful warmth
+  // 2. Blush / Shy / Tsundere: Sweet bashful warmth with natural eyes
   else if (cleanEmotion.includes("blush") || cleanEmotion.includes("shy") || cleanEmotion.includes("tsundere")) {
-    setMorphInfluence("照れ", 0.72, true);         // Cute prominent cheek blush
+    setMorphInfluence("照れ", 0.70, true);         // Cute prominent cheek blush
     setMorphInfluence("まゆにこり", 0.35, true);   // Soft brows
     setMorphInfluence("口角上げ", 0.25, true);     // Shy gentle smile
-    setMorphInfluence("なごみ", 0.30, true);       // Soft bashful eyes
     setMorphInfluence(["blush", "shy"], 0.7, true);
   }
   // 3. Thinking: Curious, gentle thoughtful expression

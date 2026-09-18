@@ -32,6 +32,7 @@
 | **STEP-020** | `2026-09-19T04:27:00+07:00` | Fix & Ship | CosyVoice long-audio auto-trimming (>25s -> 12s), cross-lingual zero-shot dispatch, timeout increase to 90s, and WeText local caching; verified live CUDA inference | **Completed** | `cosyvoice-live-cloning-v1` |
 | **STEP-021** | `2026-09-19T04:34:00+07:00` | Fix & Build | Replaced broken vector assignment with Quaternion Delta Engine (`setBoneEuler`), calibrated feminine standing A-pose, relaxed finger curls, contrapposto weight shifting, cervical dual-joint articulation, and secondary hair/ribbon spring lag | **Completed** | `shiori-human-motion-engine-v1` |
 | **STEP-022** | `2026-09-19T04:40:00+07:00` | Fix & Polish | Fixed uncanny/creepy smile: prevented 4x stacked laughing mouth morphs, isolated viseme 'あ'/'い' from '笑い口', added gentle smiling eyes ('なごみ'), soft brows ('まゆにこり'), delicate corner lift ('口角上げ'), and sweet blush ('照れ') | **Completed** | `sweet-anime-facial-expressions-v1` |
+| **STEP-023** | `2026-09-19T04:43:00+07:00` | Fix & Polish | Preserved natural anime eye texture and pupil focus: locked eye bones forward to prevent off-axis pupil drift/crossing, removed slit eye morph ('なごみ') from smiling so Shiori's gorgeous purple/gold eyes remain open and bright | **Completed** | `pristine-anime-eyes-v1` |
 
 
 
