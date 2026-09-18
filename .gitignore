@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+.npm/
+
+# Model checkpoints & weights (prevent accidental commit of huge files)
+*.gguf
+*.bin
+*.pth
+*.pt
+*.safetensors
+*.onnx
+
+# Environment & credentials
+.env
+.env.local
+*.pem
+credentials*
+
+# Logs & temp
+*.log
+tmp/
+temp/
