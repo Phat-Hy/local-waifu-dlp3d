@@ -13,12 +13,12 @@
 | **STEP-001** | `2026-09-19T01:14:00+07:00` | Setup | Harness Skills (`hs`) installed into `.agents/` | **Completed** | `setup-harness` |
 | **STEP-002** | `2026-09-19T01:27:00+07:00` | Fix | Resolved Windows subshell syntax in hooks, tools operational | **Completed** | `fix-hooks` |
 | **STEP-003** | `2026-09-19T01:29:00+07:00` | Brainstorm | Selected DLP3D framework, local Qwen GGUF, CosyVoice, & modular API architecture | **Completed** | `brainstorm-done` |
-| **STEP-004** | `2026-09-19T01:31:00+07:00` | Plan | Formulated `plans/001-local-waifu-architecture.md` & Journal tracking system | **Active** | `plan-init` |
-| **STEP-005** | `TBD` | Build | Initialize core backend server & local model directory scanner | Pending Review | `build-backend-scanner` |
-| **STEP-006** | `TBD` | Build | Integrate LLM inference engine for Qwen 3.5 4B GGUF with emotion tag streaming | Pending | `build-llm-engine` |
-| **STEP-007** | `TBD` | Build | Integrate CosyVoice TTS pipeline with voice cloning & audio generation | Pending | `build-tts-cosyvoice` |
-| **STEP-008** | `TBD` | Build | Setup DLP3D 3D Avatar frontend interface with real-time lip-sync (audio2face) & motion | Pending | `build-avatar-frontend` |
-| **STEP-009** | `TBD` | Review | End-to-end integration test & review against acceptance criteria (`hs:code-review`) | Pending | `review-v1` |
+| **STEP-004** | `2026-09-19T01:31:00+07:00` | Plan | Formulated `plans/001-local-waifu-architecture.md` & Journal tracking system | **Completed** | `plan-init` |
+| **STEP-005** | `2026-09-19T01:36:00+07:00` | Build | Implemented backend directory scanner & GGUF header parser (`backend/scanner.py`, `backend/config.py`) | **Completed** | `build-scanner` |
+| **STEP-006** | `2026-09-19T01:36:30+07:00` | Build | Implemented Emotion Parser & Sentence Streamer (`backend/emotion.py`, `backend/llm.py`) | **Completed** | `build-llm-engine` |
+| **STEP-007** | `2026-09-19T01:37:00+07:00` | Build | Implemented TTS layer & Audio Viseme Lip-Sync Preprocessor (`backend/tts.py`) | **Completed** | `build-tts` |
+| **STEP-008** | `2026-09-19T01:38:30+07:00` | Build | Implemented DLP3D Babylon.js 3D avatar viewport, WebAudio queue, & Settings Drawer (`frontend/`) | **Completed** | `build-frontend` |
+| **STEP-009** | `2026-09-19T01:39:00+07:00` | Review | 14/14 automated unit & integration tests passing; ready for `hs:code-review` | **Active** | `build-v1` |
 
 ---
 

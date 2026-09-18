@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local AI Waifu (DLP3D)</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Babylon.js CDN for 3D Avatar Rendering -->
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+</head>
+<body>
+  <div id="app-container">
+    <!-- Top Control Bar -->
+    <header id="top-bar">
+      <div class="logo">
+        <span class="sparkle">✨</span>
+        <span class="title">Local AI Waifu</span>
+        <span class="badge">DLP3D</span>
+      </div>
+      <div class="top-actions">
+        <div id="status-pill" class="status-pill disconnected">
+          <span class="dot"></span>
+          <span class="text">Connecting...</span>
+        </div>
+        <button id="open-settings-btn" class="icon-btn" title="Settings & Model Selection">
+          ⚙️ Settings
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Viewport -->
+    <main id="viewport-container">
+      <canvas id="renderCanvas"></canvas>
+
+      <!-- Overlay Emotion & Subtitle HUD -->
+      <div id="hud-overlay">
+        <div id="emotion-tag" class="emotion-badge hidden">
+          <span class="emoji">😊</span>
+          <span class="label">Happy</span>
+        </div>
+        <div id="subtitle-box" class="subtitle-box hidden">
+          <p id="subtitle-text"></p>
+        </div>
+      </div>
+
+      <!-- Floating Chat Input Bar -->
+      <div id="chat-bar-container">
+        <form id="chat-form">
+          <input 
+            type="text" 
+            id="chat-input" 
+            placeholder="Talk to your Waifu..." 
+            autocomplete="off" 
+          />
+          <button type="submit" id="send-btn" class="send-btn">
+            <span>Send</span>
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <!-- Settings & Model Scanner Drawer -->
+    <aside id="settings-drawer" class="drawer hidden">
+      <div class="drawer-header">
+        <h2>Settings & Model Hub</h2>
+        <button id="close-settings-btn" class="close-btn">&times;</button>
+      </div>
+
+      <div class="drawer-content">
+        <!-- Model Selection Section -->
+        <section class="settings-section">
+          <h3>Local GGUF Models</h3>
+          <p class="desc">Scanned from local directories (e.g., Odysseus model hub)</p>
+          <button id="scan-models-btn" class="action-btn">🔄 Rescan Models</button>
+          <div id="models-list" class="item-list">
+            <div class="loading-spinner">Loading models...</div>
+          </div>
+        </section>
+
+        <!-- Voice Reference Picker Section -->
+        <section class="settings-section">
+          <h3>Voice Reference Audio (.wav)</h3>
+          <p class="desc">Select a 3-10s reference .wav audio clip to clone for CosyVoice</p>
+          
+          <div class="voice-picker-box">
+            <input type="text" id="voice-path-input" placeholder="e.g. C:\Voices\waifu_sample.wav" />
+            <button id="set-voice-btn" class="action-btn primary">Apply Voice</button>
+          </div>
+          <div id="voice-status" class="status-msg"></div>
+        </section>
+
+        <!-- Character Personality Section -->
+        <section class="settings-section">
+          <h3>Personality & Emotion System Prompt</h3>
+          <textarea id="system-prompt-input" rows="5"></textarea>
+          <button id="save-prompt-btn" class="action-btn">Save Prompt</button>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
