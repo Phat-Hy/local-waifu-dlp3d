@@ -104,6 +104,30 @@ class TestServerEndpoints(unittest.TestCase):
             self.assertGreater(len(received_tokens), 0)
             self.assertGreater(len(received_audio_packets), 0)
 
+    def test_character_upload(self):
+        # Test invalid extension
+        res_invalid = self.client.post(
+            "/api/characters/upload",
+            files={"file": ("test.txt", b"invalid content", "text/plain")}
+        )
+        self.assertEqual(res_invalid.status_code, 400)
+
+        # Test valid glb upload
+        res_valid = self.client.post(
+            "/api/characters/upload",
+            files={"file": ("test_custom_waifu.glb", b"glTF" + b"\x00" * 20, "model/gltf-binary")}
+        )
+        self.assertEqual(res_valid.status_code, 200)
+        data = res_valid.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["filename"], "test_custom_waifu.glb")
+
+        # Clean up test file
+        test_file = Path(__file__).parent.parent / "frontend" / "characters" / "test_custom_waifu.glb"
+        if test_file.exists():
+            test_file.unlink()
+
 
 if __name__ == "__main__":
     unittest.main()
+

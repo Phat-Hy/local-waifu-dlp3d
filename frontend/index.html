@@ -72,7 +72,11 @@
         <!-- 3D Character Avatar Selection Section -->
         <section class="settings-section">
           <h3>3D Character Avatar (DLP3D)</h3>
-          <p class="desc">Select active 3D character mesh with rigging & blendshapes</p>
+          <p class="desc">Select active 3D character mesh or import any custom .glb model</p>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <button id="upload-char-btn" class="action-btn primary" style="margin-bottom:0;">📁 Import Custom Model (.glb)</button>
+            <input type="file" id="char-file-input" accept=".glb,.gltf" style="display:none;" />
+          </div>
           <div id="characters-list" class="item-list">
             <div class="loading-spinner">Loading characters...</div>
           </div>

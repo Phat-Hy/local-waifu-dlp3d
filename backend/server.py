@@ -147,27 +147,59 @@ class CharacterSelectRequest(BaseModel):
 @app.get("/api/characters")
 async def list_characters():
     chars_dir = Path(__file__).parent.parent / "frontend" / "characters"
-    characters = [
-        {"id": "FNN", "name": "Furina", "file": "FNN-default_296.glb", "description": "Fontaine Hydro Archon"},
-        {"id": "HT", "name": "Hu Tao", "file": "HT-default_214.glb", "description": "77th Director of Wangsheng Funeral Parlor"},
-        {"id": "KL", "name": "Klee", "file": "KL-default_214.glb", "description": "Spark Knight of the Knights of Favonius"},
-        {"id": "KQ", "name": "Keqing", "file": "KQ-default_420.glb", "description": "Yuheng of the Liyue Qixing"},
-        {"id": "NXD", "name": "Nahida", "file": "NXD-default_321.glb", "description": "Lesser Lord Kusanali"},
-        {"id": "Ani", "name": "Ani", "file": "Ani-default_481.glb", "description": "DLP3D Original Anime Character"},
-    ]
+    chars_dir.mkdir(parents=True, exist_ok=True)
+
+    KNOWN_INFO = {
+        "FNN-default_296.glb": ("Furina", "Fontaine Hydro Archon"),
+        "HT-default_214.glb": ("Hu Tao", "77th Director of Wangsheng Funeral Parlor"),
+        "KL-default_214.glb": ("Klee", "Spark Knight of the Knights of Favonius"),
+        "KQ-default_420.glb": ("Keqing", "Yuheng of the Liyue Qixing"),
+        "NXD-default_321.glb": ("Nahida", "Lesser Lord Kusanali"),
+        "Ani-default_481.glb": ("Ani", "DLP3D Original Anime Character"),
+    }
     
-    # Check which files actually exist on disk
     available = []
-    for c in characters:
-        file_path = chars_dir / c["file"]
-        if file_path.exists():
-            c["size_mb"] = round(file_path.stat().st_size / (1024 * 1024), 1)
-            available.append(c)
+    for file_path in chars_dir.glob("*.glb"):
+        fname = file_path.name
+        name, desc = KNOWN_INFO.get(fname, (file_path.stem, "Custom 3D Character Model"))
+        available.append({
+            "id": file_path.stem,
+            "name": name,
+            "file": fname,
+            "description": desc,
+            "size_mb": round(file_path.stat().st_size / (1024 * 1024), 1)
+        })
 
     active_char = config_mgr.get("avatar", "character_file", default="FNN-default_296.glb")
     return {
         "characters": available,
         "active_character": active_char,
+    }
+
+
+from fastapi import UploadFile, File
+import shutil
+
+@app.post("/api/characters/upload")
+async def upload_character(file: UploadFile = File(...)):
+    """
+    Accepts custom .glb 3D character models uploaded through the UI.
+    """
+    if not file.filename.lower().endswith((".glb", ".gltf")):
+        raise HTTPException(status_code=400, detail="Only .glb or .gltf 3D avatar files are supported.")
+
+    chars_dir = Path(__file__).parent.parent / "frontend" / "characters"
+    chars_dir.mkdir(parents=True, exist_ok=True)
+    destination = chars_dir / file.filename
+
+    with open(destination, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    config_mgr.set("avatar", "character_file", file.filename)
+    return {
+        "success": True,
+        "filename": file.filename,
+        "size_mb": round(destination.stat().st_size / (1024 * 1024), 1)
     }
 
 
@@ -180,6 +212,7 @@ async def select_character(req: CharacterSelectRequest):
     
     config_mgr.set("avatar", "character_file", req.character_file)
     return {"success": True, "active_character": req.character_file}
+
 
 
 

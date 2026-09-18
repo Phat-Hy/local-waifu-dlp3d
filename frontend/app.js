@@ -481,6 +481,51 @@ savePromptBtn.onclick = async () => {
   alert("System prompt saved!");
 };
 
+// --- Custom Model Import & Drag-and-Drop ---
+const uploadCharBtn = document.getElementById("upload-char-btn");
+const charFileInput = document.getElementById("char-file-input");
+
+if (uploadCharBtn && charFileInput) {
+  uploadCharBtn.onclick = () => charFileInput.click();
+  charFileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    await uploadAndLoadCharacter(file);
+  };
+}
+
+async function uploadAndLoadCharacter(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  try {
+    const res = await fetch("/api/characters/upload", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      await loadCharacterModel(data.filename);
+      fetchCharacters();
+    } else {
+      alert("Failed to upload model: " + (data.detail || "Unknown error"));
+    }
+  } catch (err) {
+    alert("Error uploading model: " + err.message);
+  }
+}
+
+// Drag & drop support on 3D viewport
+window.addEventListener("dragover", (e) => e.preventDefault());
+window.addEventListener("drop", async (e) => {
+  e.preventDefault();
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    const file = e.dataTransfer.files[0];
+    if (file.name.toLowerCase().endsWith(".glb") || file.name.toLowerCase().endsWith(".gltf")) {
+      await uploadAndLoadCharacter(file);
+    }
+  }
+});
+
 // --- Start Application ---
 window.addEventListener("DOMContentLoaded", () => {
   initBabylon();
