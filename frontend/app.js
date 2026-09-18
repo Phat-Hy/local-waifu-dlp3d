@@ -9,8 +9,49 @@ let scene, camera, engine;
 let avatarMesh = null;
 let loadedGlbMeshes = [];
 let activeMorphTargets = {};
-let activeMorphTargetManager = null;
-let activeBones = { spine: null, chest: null, neck: null, head: null, leftArm: null, rightArm: null, leftEye: null, rightEye: null };
+let activeBones = {
+  root: null,
+  hips: null,
+  spine: null,
+  chest: null,
+  neck: null,
+  head: null,
+  leftEye: null,
+  rightEye: null,
+  leftShoulder: null,
+  rightShoulder: null,
+  leftArm: null,
+  rightArm: null,
+  leftElbow: null,
+  rightElbow: null,
+  leftWrist: null,
+  rightWrist: null,
+  fingers: [],
+  hair: [],
+};
+
+// Set local bone rotation using Euler angles (pitch = X, yaw = Y, roll = Z) relative to rest quaternion
+function setBoneEuler(bone, deltaPitch, deltaYaw, deltaRoll) {
+  if (!bone) return;
+  const base = bone._restQuat || bone._bindQuat;
+  if (!base) return;
+  const delta = BABYLON.Quaternion.FromEulerAngles(deltaPitch, deltaYaw, deltaRoll);
+  const finalQuat = base.multiply(delta);
+  bone.setRotationQuaternion(finalQuat, BABYLON.Space.LOCAL);
+}
+
+// Set and save calibrated rest pose relative to bind pose
+function setBoneRestEuler(bone, pitch, yaw, roll) {
+  if (!bone) return;
+  if (!bone._bindQuat) {
+    const q = bone.getRotationQuaternion(BABYLON.Space.LOCAL);
+    bone._bindQuat = q ? q.clone() : BABYLON.Quaternion.Identity();
+  }
+  const delta = BABYLON.Quaternion.FromEulerAngles(pitch, yaw, roll);
+  bone._restQuat = bone._bindQuat.multiply(delta);
+  bone.setRotationQuaternion(bone._restQuat.clone(), BABYLON.Space.LOCAL);
+}
+
 let currentAnimationGroups = [];
 let currentCharacterFile = null;
 let ws = null;
@@ -130,8 +171,7 @@ function initBabylon() {
   const dirLight = new BABYLON.DirectionalLight("DirLight", new BABYLON.Vector3(-1, -1, 1), scene);
   dirLight.intensity = 0.7;
 
-  // Initial character load
-  loadCharacterModel("FNN-default_296.glb");
+  // Initial character model will be loaded dynamically by loadConfig() from config.json
 
   // --- Organic Kinematics, Acoustic Speech Coupling, Saccadic Gaze & Gesture State ---
   let animTime = 0;
@@ -219,61 +259,73 @@ function initBabylon() {
     gazeState.currentY += (gazeState.targetY - gazeState.currentY) * 0.22;
 
     if (activeBones.leftEye) {
-      activeBones.leftEye.rotation = new BABYLON.Vector3(gazeState.currentY * 0.8, gazeState.currentX * 0.8, 0);
+      setBoneEuler(activeBones.leftEye, gazeState.currentY * 0.75, gazeState.currentX * 0.75, 0);
     }
     if (activeBones.rightEye) {
-      activeBones.rightEye.rotation = new BABYLON.Vector3(gazeState.currentY * 0.8, gazeState.currentX * 0.8, 0);
+      setBoneEuler(activeBones.rightEye, gazeState.currentY * 0.75, gazeState.currentX * 0.75, 0);
     }
 
-    // --- Layer 1: Organic Multi-Octave Breathing & Torso Sway (Fractal Kinematics) ---
-    if (activeBones.chest || activeBones.spine) {
-      const breathDepth = 0.012 + organicHarmonic(animTime, 0.28, 2.1) * 0.005;
-      const breathFreq = isPlayingAudio ? 2.1 : 1.55;
-      const breathPitch = Math.sin(animTime * breathFreq) * breathDepth;
+    // --- Layer 1: Organic Multi-Joint Respiration & Contrapposto Weight Shift ---
+    const breathFreq = isPlayingAudio ? 2.1 : 1.55;
+    const breathPhase = Math.sin(animTime * breathFreq);
+    const breathPitch = breathPhase * (0.012 + organicHarmonic(animTime, 0.28, 2.1) * 0.005);
+    const chestVocalLift = -liveSpeechEnergy * 0.018 - speechCadenceBeat * 0.012;
 
-      const swayLateral = organicHarmonic(animTime, 0.48, 1.3) * 0.009;
-      const swayYaw = organicHarmonic(animTime, 0.32, 4.7) * 0.006;
-      const chestVocalLift = -liveSpeechEnergy * 0.018 - speechCadenceBeat * 0.012;
+    const swayLateral = organicHarmonic(animTime, 0.48, 1.3) * 0.009;
+    const swayYaw = organicHarmonic(animTime, 0.32, 4.7) * 0.006;
+    const swayRoll = organicHarmonic(animTime, 0.42, 2.8) * 0.006;
 
-      const bone = activeBones.chest || activeBones.spine;
-      bone.rotation = new BABYLON.Vector3(breathPitch + chestVocalLift, swayYaw, swayLateral);
+    // Weight shift contrapposto across hips and spine
+    const hipContrapposto = Math.sin(animTime * 0.38) * 0.012;
+    if (activeBones.hips) {
+      setBoneEuler(activeBones.hips, 0.02, hipContrapposto * 0.5, -0.022 + hipContrapposto);
+    }
+    if (activeBones.spine) {
+      setBoneEuler(activeBones.spine, breathPitch * 0.4 - 0.015, swayYaw * 0.35, 0.020 - hipContrapposto * 0.9 + swayRoll * 0.35);
+    }
+    if (activeBones.chest) {
+      setBoneEuler(activeBones.chest, breathPitch * 0.85 + chestVocalLift, swayYaw * 0.5, swayRoll * 0.5);
+    }
+    // Subtle shoulder rise on inhale
+    const shoulderLift = breathPhase * 0.005;
+    if (activeBones.leftShoulder) {
+      setBoneEuler(activeBones.leftShoulder, 0.02, 0, -0.04 - shoulderLift);
+    }
+    if (activeBones.rightShoulder) {
+      setBoneEuler(activeBones.rightShoulder, 0.02, 0, 0.04 + shoulderLift);
     }
 
-    // --- Layer 2: Acoustic Speech Head Dynamics (Syllables, Pitch & Gaze) ---
-    if (activeBones.head) {
-      const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.032) + (speechCadenceBeat * 0.025);
-      const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0012 : 0;
-      const speechTilt = Math.sin(animTime * 2.3) * liveSpeechEnergy * 0.022;
+    // --- Layer 2: Cervical Spine (Two-Joint Head & Neck Articulation) + Syllables & Pitch ---
+    const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.032) + (speechCadenceBeat * 0.028);
+    const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0012 : 0;
+    const speechTilt = Math.sin(animTime * 2.3) * liveSpeechEnergy * 0.022;
 
-      const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.012;
-      const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.014;
-      const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.01;
+    const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.014;
+    const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
+    const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
 
-      activeBones.head.rotation = new BABYLON.Vector3(
-        idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.6,
-        idleHeadYaw + gazeState.currentX * 0.7,
-        idleHeadRoll + speechTilt
-      );
-    }
+    // Total head orientation
+    let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
+    let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
+    let totalHeadRoll = idleHeadRoll + speechTilt;
 
-    // --- Layer 3: Dynamic Co-Speech Hand & Arm Phrasing ---
-    const armSpeechEnergy = liveSpeechEnergy * 0.16;
-    const armBreathSway = Math.sin(animTime * 1.55) * 0.012;
+    // --- Layer 3: Dynamic Co-Speech Hand & Arm Phrasing (Arms & Forearms) ---
+    const armSpeechEnergy = liveSpeechEnergy * 0.08;
+    const armBreathSway = Math.sin(animTime * 1.55) * 0.010;
 
-    if (activeBones.leftArm && (!currentGesture || currentGesture.name === "none" || currentGesture.name === "wave" || currentGesture.name === "nod" || currentGesture.name === "tilt")) {
-      activeBones.leftArm.rotation = new BABYLON.Vector3(
-        liveSpeechEnergy * 0.05,
-        0,
-        -0.92 + armBreathSway + armSpeechEnergy
-      );
-    }
-    if (activeBones.rightArm && (!currentGesture || currentGesture.name === "none" || currentGesture.name === "nod" || currentGesture.name === "tilt")) {
-      activeBones.rightArm.rotation = new BABYLON.Vector3(
-        liveSpeechEnergy * 0.05,
-        0,
-        0.92 - armBreathSway - armSpeechEnergy
-      );
-    }
+    let lArmPitch = armSpeechEnergy * 0.3;
+    let lArmYaw = 0;
+    let lArmRoll = armBreathSway + armSpeechEnergy * 0.5;
+
+    let rArmPitch = armSpeechEnergy * 0.3;
+    let rArmYaw = 0;
+    let rArmRoll = -armBreathSway - armSpeechEnergy * 0.5;
+
+    let lElbowFlex = armSpeechEnergy * 0.25;
+    let rElbowFlex = -armSpeechEnergy * 0.25;
+
+    let lWristFlex = 0;
+    let rWristFlex = 0;
 
     // --- Layer 4: Contextual Conversational Gestures ---
     if (currentGesture.name !== "none") {
@@ -283,49 +335,97 @@ function initBabylon() {
       if (gElapsed < gDuration) {
         const rawP = gElapsed / gDuration;
         const p = rawP * rawP * (3.0 - 2.0 * rawP); // Cubic Hermite smoothstep
+        const gSin = Math.sin(p * Math.PI);
 
-        if (currentGesture.name === "wave" && activeBones.rightArm) {
-          const armHeight = -0.38 - Math.sin(p * Math.PI) * 0.82;
-          const handWave = Math.sin(p * 22.0) * 0.3;
-          activeBones.rightArm.rotation = new BABYLON.Vector3(0, handWave, armHeight);
-          if (activeBones.head) {
-            activeBones.head.rotation.x += -0.02;
-            activeBones.head.rotation.y += -0.04;
-            activeBones.head.rotation.z += 0.03;
-          }
-        } else if (currentGesture.name === "nod" && activeBones.head) {
-          const nodPitch = Math.sin(p * 14.0) * 0.065 * (1.0 - p * 0.4);
-          activeBones.head.rotation.x += nodPitch;
-          if (activeBones.chest) activeBones.chest.rotation.x += nodPitch * 0.4;
-        } else if (currentGesture.name === "tilt" && activeBones.head) {
-          const tiltRoll = Math.sin(p * Math.PI) * 0.11;
-          activeBones.head.rotation.z += tiltRoll;
-        } else if (currentGesture.name === "think" && activeBones.head) {
-          const thinkPitch = -Math.sin(p * Math.PI) * 0.055;
-          const thinkYaw = Math.sin(p * Math.PI) * 0.065;
-          activeBones.head.rotation.x += thinkPitch;
-          activeBones.head.rotation.y += thinkYaw;
-          if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.65);
+        if (currentGesture.name === "wave") {
+          const handWave = Math.sin(p * 22.0) * 0.28;
+          rArmPitch = -0.45 * gSin;
+          rArmRoll = -0.92 * gSin;
+          rArmYaw = handWave * 0.2;
+          rElbowFlex = -0.75 * gSin;
+          rWristFlex = handWave * 0.35;
+          totalHeadPitch += -0.02 * gSin;
+          totalHeadYaw += -0.04 * gSin;
+          totalHeadRoll += 0.03 * gSin;
+        } else if (currentGesture.name === "nod") {
+          const nodPitch = Math.sin(p * 14.0) * 0.075 * (1.0 - p * 0.4);
+          totalHeadPitch += nodPitch;
+        } else if (currentGesture.name === "tilt") {
+          const tiltRoll = gSin * 0.13;
+          totalHeadRoll += tiltRoll;
+        } else if (currentGesture.name === "think") {
+          totalHeadPitch += -0.06 * gSin;
+          totalHeadYaw += 0.08 * gSin;
+          totalHeadRoll += 0.05 * gSin;
+          rArmPitch = 0.32 * gSin;
+          rArmRoll = -0.65 * gSin;
+          rElbowFlex = -0.55 * gSin;
+          rWristFlex = 0.18 * gSin;
         } else if (currentGesture.name === "shy") {
-          const shyPitch = Math.sin(p * Math.PI) * 0.07;
-          if (activeBones.head) activeBones.head.rotation.x += shyPitch;
-          if (activeBones.leftArm) activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.72);
-          if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.72);
+          totalHeadPitch += 0.08 * gSin;
+          totalHeadRoll += 0.04 * gSin;
+          lArmRoll = 0.18 * gSin;
+          rArmRoll = -0.18 * gSin;
         } else if (currentGesture.name === "excited") {
-          const bounce = Math.abs(Math.sin(p * 15.0)) * 0.026;
-          if (activeBones.chest) activeBones.chest.rotation.x += -bounce * 0.7;
-          if (activeBones.head) activeBones.head.rotation.x += bounce * 1.0;
+          const bounce = Math.abs(Math.sin(p * 15.0)) * 0.032;
+          totalHeadPitch += bounce * 1.3;
+          lArmRoll = -bounce * 2.2;
+          rArmRoll = bounce * 2.2;
         } else if (currentGesture.name === "shrug") {
-          const shrug = Math.sin(p * Math.PI) * 0.075;
-          if (activeBones.head) activeBones.head.rotation.z += shrug * 0.4;
-          if (activeBones.leftArm) activeBones.leftArm.rotation = new BABYLON.Vector3(0, 0, -0.92 + shrug);
-          if (activeBones.rightArm) activeBones.rightArm.rotation = new BABYLON.Vector3(0, 0, 0.92 - shrug);
-        } else if (currentGesture.name === "lean" && activeBones.spine) {
-          const leanPitch = Math.sin(p * Math.PI) * 0.06;
-          activeBones.spine.rotation.x += leanPitch;
+          const shrug = gSin * 0.11;
+          totalHeadRoll += shrug * 0.4;
+          lElbowFlex = 0.2 * gSin;
+          rElbowFlex = -0.2 * gSin;
+          lWristFlex = 0.2 * gSin;
+          rWristFlex = -0.2 * gSin;
+        } else if (currentGesture.name === "lean") {
+          const lean = gSin * 0.07;
+          totalHeadPitch += -lean * 0.5;
+          if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
+          if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.7, 0, 0);
         }
       } else {
         currentGesture.name = "none";
+      }
+    }
+
+    // Apply Cervical Spine Articulation (30% neck, 70% head)
+    if (activeBones.neck) {
+      setBoneEuler(activeBones.neck, totalHeadPitch * 0.30, totalHeadYaw * 0.30, totalHeadRoll * 0.30);
+    }
+    if (activeBones.head) {
+      setBoneEuler(activeBones.head, totalHeadPitch * 0.70, totalHeadYaw * 0.70, totalHeadRoll * 0.70);
+    }
+
+    // Apply Arms, Elbows, and Wrists
+    if (activeBones.leftArm) {
+      setBoneEuler(activeBones.leftArm, lArmPitch, lArmYaw, lArmRoll);
+    }
+    if (activeBones.rightArm) {
+      setBoneEuler(activeBones.rightArm, rArmPitch, rArmYaw, rArmRoll);
+    }
+    if (activeBones.leftElbow) {
+      setBoneEuler(activeBones.leftElbow, 0, lElbowFlex, 0);
+    }
+    if (activeBones.rightElbow) {
+      setBoneEuler(activeBones.rightElbow, 0, rElbowFlex, 0);
+    }
+    if (activeBones.leftWrist) {
+      setBoneEuler(activeBones.leftWrist, 0, 0, lWristFlex);
+    }
+    if (activeBones.rightWrist) {
+      setBoneEuler(activeBones.rightWrist, 0, 0, rWristFlex);
+    }
+
+    // --- Layer 4.5: Secondary Hair & Ribbon Dynamic Sway ---
+    if (activeBones.hair && activeBones.hair.length > 0) {
+      for (let i = 0; i < activeBones.hair.length; i++) {
+        const h = activeBones.hair[i];
+        h.lagPitch += (totalHeadPitch - h.lagPitch) * 0.14;
+        h.lagRoll += (totalHeadRoll - h.lagRoll) * 0.14;
+        const hairPitch = (totalHeadPitch - h.lagPitch) * -0.45;
+        const hairRoll = (totalHeadRoll - h.lagRoll) * -0.45;
+        setBoneEuler(h.bone, hairPitch, 0, hairRoll);
       }
     }
 
@@ -421,7 +521,7 @@ async function loadCharacterModel(filename) {
     camera.radius = 2.4;
 
     // Relax horizontal T-Pose into natural standing pose
-    relaxArmBones(result);
+    initHumanSkeletonAndPose(result);
 
     // Autoplay embedded GLB animation groups (DLP3D avatars)
     if (result.animationGroups && result.animationGroups.length > 0) {
@@ -461,29 +561,49 @@ async function loadCharacterModel(filename) {
   }
 }
 
-// Relax T-Pose arms down into a natural standing rest pose and map skeleton bones
-function relaxArmBones(result) {
-  activeBones = { spine: null, chest: null, neck: null, head: null, leftArm: null, rightArm: null };
+// Map complete anatomical human skeleton and calibrate natural feminine standing posture
+function initHumanSkeletonAndPose(result) {
+  activeBones = {
+    root: null,
+    hips: null,
+    spine: null,
+    chest: null,
+    neck: null,
+    head: null,
+    leftEye: null,
+    rightEye: null,
+    leftShoulder: null,
+    rightShoulder: null,
+    leftArm: null,
+    rightArm: null,
+    leftElbow: null,
+    rightElbow: null,
+    leftWrist: null,
+    rightWrist: null,
+    fingers: [],
+    hair: [],
+  };
+
   const skeletons = result.skeletons || [];
   for (const sk of skeletons) {
     for (const bone of sk.bones) {
       const name = bone.name;
       const lower = name.toLowerCase();
 
-      // Japanese MMD names & standard bone names
-      if (name === "左腕" || lower.includes("arm_l") || lower.includes("upperarm.l")) {
-        activeBones.leftArm = bone;
-        bone.rotate(BABYLON.Axis.Z, -0.92, BABYLON.Space.LOCAL);
-      } else if (name === "右腕" || lower.includes("arm_r") || lower.includes("upperarm.r")) {
-        activeBones.rightArm = bone;
-        bone.rotate(BABYLON.Axis.Z, 0.92, BABYLON.Space.LOCAL);
-      } else if (name === "左ひじ" || lower.includes("elbow_l") || lower.includes("forearm.l")) {
-        bone.rotate(BABYLON.Axis.Y, 0.22, BABYLON.Space.LOCAL);
-      } else if (name === "右ひじ" || lower.includes("elbow_r") || lower.includes("forearm.r")) {
-        bone.rotate(BABYLON.Axis.Y, -0.22, BABYLON.Space.LOCAL);
-      } else if (name === "上半身" || lower.includes("spine")) {
+      // Store initial bind quaternion if not present
+      if (!bone._bindQuat) {
+        const q = bone.getRotationQuaternion(BABYLON.Space.LOCAL);
+        bone._bindQuat = q ? q.clone() : BABYLON.Quaternion.Identity();
+      }
+
+      // 1. Spine & Torso Chain
+      if (name === "全ての親" || lower === "root") {
+        activeBones.root = bone;
+      } else if (name === "下半身" || name === "センター" || lower.includes("hips") || lower.includes("pelvis")) {
+        if (!activeBones.hips) activeBones.hips = bone;
+      } else if (name === "上半身" || (lower.includes("spine") && !lower.includes("spine1") && !lower.includes("chest"))) {
         activeBones.spine = bone;
-      } else if (name === "上半身2" || lower.includes("chest")) {
+      } else if (name === "上半身2" || lower.includes("chest") || lower.includes("spine1")) {
         activeBones.chest = bone;
       } else if (name === "首" || lower.includes("neck")) {
         activeBones.neck = bone;
@@ -494,7 +614,96 @@ function relaxArmBones(result) {
       } else if (name === "右目" || lower.includes("eye_r") || lower.includes("eye.r")) {
         activeBones.rightEye = bone;
       }
+
+      // 2. Shoulders & Upper Limbs
+      else if (name === "左肩" || lower.includes("shoulder_l") || lower.includes("shoulder.l") || lower.includes("clavicle_l")) {
+        activeBones.leftShoulder = bone;
+      } else if (name === "右肩" || lower.includes("shoulder_r") || lower.includes("shoulder.r") || lower.includes("clavicle_r")) {
+        activeBones.rightShoulder = bone;
+      } else if (name === "左腕" || lower.includes("arm_l") || lower.includes("upperarm.l")) {
+        activeBones.leftArm = bone;
+      } else if (name === "右腕" || lower.includes("arm_r") || lower.includes("upperarm.r")) {
+        activeBones.rightArm = bone;
+      } else if (name === "左ひじ" || lower.includes("elbow_l") || lower.includes("forearm.l")) {
+        activeBones.leftElbow = bone;
+      } else if (name === "右ひじ" || lower.includes("elbow_r") || lower.includes("forearm.r")) {
+        activeBones.rightElbow = bone;
+      } else if (name === "左手首" || lower.includes("wrist_l") || lower.includes("hand_l") || lower.includes("hand.l")) {
+        activeBones.leftWrist = bone;
+      } else if (name === "右手首" || lower.includes("wrist_r") || lower.includes("hand_r") || lower.includes("hand.r")) {
+        activeBones.rightWrist = bone;
+      }
+
+      // 3. Hand & Finger Chains (curl relaxed natural hand)
+      else if (name.includes("親指") || name.includes("人指") || name.includes("中指") || name.includes("薬指") || name.includes("小指") ||
+               lower.includes("thumb") || lower.includes("index") || lower.includes("middle") || lower.includes("ring") || lower.includes("pinky")) {
+        const isLeft = name.includes("左") || lower.includes("_l") || lower.includes(".l");
+        activeBones.fingers.push({ bone, isLeft, name });
+      }
+
+      // 4. Secondary Hair & Ribbon Dynamics
+      else if (name.includes("髪") || name.includes("前髪") || name.includes("横髪") || name.includes("後髪") || name.includes("リボン") || name.includes("アホ毛")) {
+        activeBones.hair.push({ bone, name, lagPitch: 0, lagRoll: 0 });
+      }
     }
+  }
+
+  // Calibrate natural standing posture if model is MMD PMX or lacks embedded animations
+  const isMmd = currentCharacterFile && (currentCharacterFile.endsWith(".pmx") || currentCharacterFile.endsWith(".pmd"));
+  if (isMmd || !result.animationGroups || result.animationGroups.length === 0) {
+    calibrateNaturalMmdStandingPose();
+  }
+}
+
+// Transform stiff T-Pose into elegant, natural human standing posture (A-Pose + contrapposto + finger curls)
+function calibrateNaturalMmdStandingPose() {
+  // 1. Shoulders: natural gentle feminine slope
+  if (activeBones.leftShoulder) {
+    setBoneRestEuler(activeBones.leftShoulder, 0.02, 0.0, -0.04);
+  }
+  if (activeBones.rightShoulder) {
+    setBoneRestEuler(activeBones.rightShoulder, 0.02, 0.0, 0.04);
+  }
+
+  // 2. Arms: graceful A-pose down by the sides, angled slightly forward (~45° down, 7° forward)
+  if (activeBones.leftArm) {
+    setBoneRestEuler(activeBones.leftArm, 0.12, 0.08, -0.78);
+  }
+  if (activeBones.rightArm) {
+    setBoneRestEuler(activeBones.rightArm, 0.12, -0.08, 0.78);
+  }
+
+  // 3. Elbows: soft, organic human bend (~24° flexion)
+  if (activeBones.leftElbow) {
+    setBoneRestEuler(activeBones.leftElbow, 0.05, 0.38, -0.08);
+  }
+  if (activeBones.rightElbow) {
+    setBoneRestEuler(activeBones.rightElbow, 0.05, -0.38, 0.08);
+  }
+
+  // 4. Wrists: soft inward curve toward thigh
+  if (activeBones.leftWrist) {
+    setBoneRestEuler(activeBones.leftWrist, 0.06, 0.10, -0.08);
+  }
+  if (activeBones.rightWrist) {
+    setBoneRestEuler(activeBones.rightWrist, 0.06, -0.10, 0.08);
+  }
+
+  // 5. Fingers: graceful resting curl (never stiff flat spatulas)
+  for (const f of activeBones.fingers) {
+    const isThumb = f.name.includes("親指") || f.name.toLowerCase().includes("thumb");
+    const isTip = f.name.includes("3") || f.name.includes("先");
+    const curl = isThumb ? (f.isLeft ? -0.16 : 0.16) : (f.isLeft ? -0.26 : 0.26);
+    const tipFactor = isTip ? 0.7 : 1.0;
+    setBoneRestEuler(f.bone, 0.03, 0.0, curl * tipFactor);
+  }
+
+  // 6. Contrapposto weight distribution (hips & spine balance)
+  if (activeBones.hips) {
+    setBoneRestEuler(activeBones.hips, 0.02, 0.0, -0.022);
+  }
+  if (activeBones.spine) {
+    setBoneRestEuler(activeBones.spine, -0.015, 0.0, 0.020);
   }
 }
 
@@ -899,8 +1108,15 @@ async function loadConfig() {
     if (cfg.tts?.voice_name && voicePresetSelect) {
       voicePresetSelect.value = cfg.tts.voice_name;
     }
+    const targetChar = cfg.avatar?.character_file || "ShioriNovella/ShioriNovella.pmx";
+    if (!currentCharacterFile || currentCharacterFile !== targetChar) {
+      loadCharacterModel(targetChar);
+    }
   } catch (e) {
     console.error("Config load error:", e);
+    if (!currentCharacterFile) {
+      loadCharacterModel("ShioriNovella/ShioriNovella.pmx");
+    }
   }
 }
 
