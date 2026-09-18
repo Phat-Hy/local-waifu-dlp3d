@@ -45,10 +45,9 @@ if (-not (Test-Path $venvPath)) {
 $venvPython = Join-Path $venvPath "Scripts\python.exe"
 $venvPip = Join-Path $venvPath "Scripts\pip.exe"
 
-Write-Host "Installing PyTorch with CUDA 12.4 support..." -ForegroundColor Cyan
-& "$venvPip" install --upgrade pip
-& "$venvPip" install torch torchaudio --index-url https://download.pytorch.org/whl/cu124
-& "$venvPip" install fastapi uvicorn modelscope pydantic soundfile
+Write-Host "Turbo-charging package downloads with UV multi-threaded installer..." -ForegroundColor Cyan
+python -m uv pip install --python "$venvPython" torch torchaudio --index-url https://download.pytorch.org/whl/cu124
+python -m uv pip install --python "$venvPython" fastapi uvicorn modelscope "huggingface_hub[hf_transfer]" pydantic soundfile
 
 # 4. Clone or install CosyVoice repository if not present
 Write-Host ""
@@ -62,14 +61,24 @@ if (-not (Test-Path $cosyRepoDir)) {
 # Install CosyVoice dependencies
 $cosyReqs = Join-Path $cosyRepoDir "requirements.txt"
 if (Test-Path $cosyReqs) {
-    & "$venvPip" install -r $cosyReqs
+    Write-Host "Installing repository dependencies via UV..." -ForegroundColor Cyan
+    python -m uv pip install --python "$venvPython" -r $cosyReqs
 }
 
-# Download pretrained CosyVoice-300M weights via ModelScope
+# Download pretrained CosyVoice-300M weights via ModelScope / HuggingFace
 $pretrainedDir = Join-Path $serviceDir "pretrained_models\CosyVoice-300M"
 if (-not (Test-Path $pretrainedDir)) {
-    Write-Host "Downloading CosyVoice-300M weights via ModelScope (about 2.8GB)..." -ForegroundColor Cyan
-    & "$venvPython" -c "from modelscope import snapshot_download; snapshot_download('iic/CosyVoice-300M', local_dir=r'$pretrainedDir')"
+    Write-Host "Downloading CosyVoice-300M weights (~2.8GB)..." -ForegroundColor Cyan
+    $env:HF_HUB_ENABLE_HF_TRANSFER = "1"
+    & "$venvPython" -c "try:
+    from modelscope import snapshot_download
+    print('Downloading via ModelScope CDN...')
+    snapshot_download('iic/CosyVoice-300M', local_dir=r'$pretrainedDir')
+except Exception as e:
+    print('ModelScope notice:', e, 'Trying HuggingFace...')
+    from huggingface_hub import snapshot_download
+    snapshot_download(repo_id='FunAudioLLM/CosyVoice-300M', local_dir=r'$pretrainedDir')
+"
 }
 
 Write-Host ""
