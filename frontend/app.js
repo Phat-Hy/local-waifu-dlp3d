@@ -350,6 +350,8 @@ function initBabylon() {
 
       let lWristFlex = 0;
       let rWristFlex = 0;
+      let lWristYaw = 0;
+      let rWristYaw = 0;
 
       // 4. Contextual Conversational Gestures
       if (currentGesture.name !== "none") {
@@ -362,48 +364,72 @@ function initBabylon() {
           const gSin = Math.sin(p * Math.PI);
 
           if (currentGesture.name === "wave") {
-            const handWave = Math.sin(p * 18.0) * 0.32;
-            rArmPitch = -0.38 * gSin;
-            rArmRoll = -0.85 * gSin;
-            rArmYaw = handWave * 0.15;
-            rElbowFlex = -0.65 * gSin;
-            rWristFlex = handWave * 0.40;
-            totalHeadPitch += -0.03 * gSin;
-            totalHeadRoll += 0.04 * gSin;
+            // Full human waving gesture: arm raises high, elbow bends upright, hand waves beside head
+            const handWave = Math.sin(p * 20.0) * 0.45;
+            rArmPitch = -0.55 * gSin;
+            rArmRoll = -1.45 * gSin;
+            rArmYaw = 0.25 * gSin;
+            rElbowFlex = -1.85 * gSin;
+            rWristYaw = handWave * 0.50 * gSin;
+            rWristFlex = (0.28 + handWave * 0.35) * gSin;
+            totalHeadPitch += -0.04 * gSin;
+            totalHeadRoll += 0.08 * gSin;
           } else if (currentGesture.name === "nod") {
-            const nodPitch = Math.sin(p * 14.0) * 0.075 * (1.0 - p * 0.4);
+            const nodPitch = Math.sin(p * 14.0) * 0.11 * (1.0 - p * 0.35);
             totalHeadPitch += nodPitch;
           } else if (currentGesture.name === "tilt") {
-            totalHeadRoll += gSin * 0.14;
+            totalHeadRoll += gSin * 0.18;
+            totalHeadPitch += -0.03 * gSin;
           } else if (currentGesture.name === "think") {
-            totalHeadPitch += -0.06 * gSin;
-            totalHeadYaw += 0.08 * gSin;
-            totalHeadRoll += 0.05 * gSin;
-            rArmPitch = 0.28 * gSin;
-            rArmRoll = -0.58 * gSin;
-            rElbowFlex = -0.50 * gSin;
-            rWristFlex = 0.15 * gSin;
+            // Thoughtful chin-touch gesture: hand lifts to chin, elbow tucks, thoughtful gaze
+            totalHeadPitch += 0.06 * gSin;
+            totalHeadYaw += 0.12 * gSin;
+            totalHeadRoll += -0.10 * gSin;
+            rArmPitch = -0.65 * gSin;
+            rArmRoll = -0.85 * gSin;
+            rArmYaw = -0.35 * gSin;
+            rElbowFlex = -2.15 * gSin;
+            rWristFlex = 0.38 * gSin;
+            rWristYaw = -0.15 * gSin;
           } else if (currentGesture.name === "shy") {
-            totalHeadPitch += 0.08 * gSin;
-            totalHeadRoll += 0.04 * gSin;
-            lArmRoll = 0.18 * gSin;
-            rArmRoll = -0.18 * gSin;
+            // Two-handed demure front clasp
+            totalHeadPitch += 0.12 * gSin;
+            totalHeadRoll += 0.05 * gSin;
+            lArmPitch = -0.45 * gSin;
+            lArmRoll = 0.45 * gSin;
+            lArmYaw = 0.35 * gSin;
+            rArmPitch = -0.45 * gSin;
+            rArmRoll = -0.45 * gSin;
+            rArmYaw = -0.35 * gSin;
+            lElbowFlex = 1.35 * gSin;
+            rElbowFlex = -1.35 * gSin;
+            lWristFlex = 0.25 * gSin;
+            rWristFlex = -0.25 * gSin;
           } else if (currentGesture.name === "excited") {
-            const bounce = Math.abs(Math.sin(p * 15.0)) * 0.032;
-            totalHeadPitch += bounce * 1.3;
-            lArmRoll = -bounce * 2.2;
-            rArmRoll = bounce * 2.2;
+            // Joyful chest bounce with raised hands
+            const bounce = Math.abs(Math.sin(p * 16.0)) * 0.045;
+            totalHeadPitch += -bounce * 1.8;
+            lArmPitch = -0.55 * gSin;
+            lArmRoll = 0.55 * gSin;
+            rArmPitch = -0.55 * gSin;
+            rArmRoll = -0.55 * gSin;
+            lElbowFlex = 1.75 * gSin;
+            rElbowFlex = -1.75 * gSin;
           } else if (currentGesture.name === "shrug") {
             totalHeadRoll += gSin * 0.08;
-            lElbowFlex = 0.2 * gSin;
-            rElbowFlex = -0.2 * gSin;
-            lWristFlex = 0.2 * gSin;
-            rWristFlex = -0.2 * gSin;
+            lArmPitch = -0.25 * gSin;
+            rArmPitch = -0.25 * gSin;
+            lArmRoll = 0.25 * gSin;
+            rArmRoll = -0.25 * gSin;
+            lElbowFlex = 1.25 * gSin;
+            rElbowFlex = -1.25 * gSin;
+            lWristFlex = -0.35 * gSin;
+            rWristFlex = 0.35 * gSin;
           } else if (currentGesture.name === "lean") {
-            const lean = gSin * 0.07;
-            totalHeadPitch += -lean * 0.5;
-            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
-            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.7, 0, 0);
+            const lean = gSin * 0.10;
+            totalHeadPitch += -lean * 0.6;
+            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.8, 0, 0);
+            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 1.0, 0, 0);
           }
         } else {
           currentGesture.name = "none";
@@ -412,8 +438,11 @@ function initBabylon() {
 
       // 5. Scapulohumeral Rhythm (Shoulders naturally elevate when arms raise)
       const shoulderLift = breathPhase * 0.005;
-      const rShoulderElev = rArmPitch * -0.20 + Math.abs(rArmRoll) * 0.15;
-      const lShoulderElev = lArmPitch * -0.20 + Math.abs(lArmRoll) * 0.15;
+      const gSinElev = currentGesture.name !== "none" ? Math.sin((animTime - currentGesture.startTime) / currentGesture.duration * Math.PI) : 0;
+      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.22 * gSinElev : 0) + (currentGesture.name === "shrug" ? 0.20 * gSinElev : 0);
+
+      const rShoulderElev = rArmPitch * -0.20 + Math.abs(rArmRoll) * 0.15 + gestureShoulderLift;
+      const lShoulderElev = lArmPitch * -0.20 + Math.abs(lArmRoll) * 0.15 + (currentGesture.name === "shrug" ? 0.20 * gSinElev : 0);
       if (activeBones.leftShoulder) {
         setBoneEuler(activeBones.leftShoulder, 0.02, 0, -0.04 - lShoulderElev - shoulderLift);
       }
@@ -440,8 +469,8 @@ function initBabylon() {
       if (activeBones.rightArm) setBoneEuler(activeBones.rightArm, rArmPitch, rArmYaw, rArmRoll);
       if (activeBones.leftElbow) setBoneEuler(activeBones.leftElbow, 0, lElbowFlex, 0);
       if (activeBones.rightElbow) setBoneEuler(activeBones.rightElbow, 0, rElbowFlex, 0);
-      if (activeBones.leftWrist) setBoneEuler(activeBones.leftWrist, lLag, 0, lWristFlex);
-      if (activeBones.rightWrist) setBoneEuler(activeBones.rightWrist, rLag, 0, rWristFlex);
+      if (activeBones.leftWrist) setBoneEuler(activeBones.leftWrist, lLag, lWristYaw, lWristFlex);
+      if (activeBones.rightWrist) setBoneEuler(activeBones.rightWrist, rLag, rWristYaw, rWristFlex);
     }
 
     // --- Layer 4.5: Secondary Hair & Ribbon Dynamic Sway ---
