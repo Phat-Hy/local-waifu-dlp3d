@@ -13,6 +13,7 @@ import base64
 import asyncio
 from pathlib import Path
 import shutil
+import zipfile
 from typing import Dict, Any, List, Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
@@ -292,24 +293,60 @@ async def list_characters():
 @app.post("/api/characters/upload")
 async def upload_character(file: UploadFile = File(...)):
     """
-    Accepts custom .glb 3D character models uploaded through the UI.
+    Accepts custom 3D character models (.pmx, .pmd, .glb, .gltf) or .zip archives with textures.
     """
-    if not file.filename.lower().endswith((".glb", ".gltf")):
-        raise HTTPException(status_code=400, detail="Only .glb or .gltf 3D avatar files are supported.")
+    filename_lower = file.filename.lower()
+    valid_exts = (".glb", ".gltf", ".pmx", ".pmd", ".zip")
+    if not filename_lower.endswith(valid_exts):
+        raise HTTPException(status_code=400, detail="Only .pmx, .pmd, .glb, .gltf, or .zip packages are supported.")
 
     chars_dir = Path(__file__).parent.parent / "frontend" / "characters"
     chars_dir.mkdir(parents=True, exist_ok=True)
-    destination = chars_dir / file.filename
 
-    with open(destination, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    if filename_lower.endswith(".zip"):
+        zip_stem = Path(file.filename).stem
+        dest_folder = chars_dir / zip_stem
+        dest_folder.mkdir(parents=True, exist_ok=True)
+        temp_zip = dest_folder / file.filename
+        with open(temp_zip, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    config_mgr.set("avatar", "character_file", file.filename)
-    return {
-        "success": True,
-        "filename": file.filename,
-        "size_mb": round(destination.stat().st_size / (1024 * 1024), 1)
-    }
+        try:
+            with zipfile.ZipFile(temp_zip, "r") as zip_ref:
+                zip_ref.extractall(dest_folder)
+        finally:
+            if temp_zip.exists():
+                temp_zip.unlink()
+
+        # Search for model file inside the extracted package (.pmx preferred for MMD, then .glb)
+        candidates = (
+            list(dest_folder.rglob("*.pmx")) +
+            list(dest_folder.rglob("*.pmd")) +
+            list(dest_folder.rglob("*.glb")) +
+            list(dest_folder.rglob("*.gltf"))
+        )
+        if not candidates:
+            raise HTTPException(status_code=400, detail="No .pmx, .pmd, or .glb 3D avatar found inside the zip archive.")
+
+        chosen_file = candidates[0].relative_to(chars_dir).as_posix()
+        config_mgr.set("avatar", "character_file", chosen_file)
+        total_size = sum(f.stat().st_size for f in dest_folder.rglob("*") if f.is_file())
+        return {
+            "success": True,
+            "filename": chosen_file,
+            "size_mb": round(total_size / (1024 * 1024), 1)
+        }
+    else:
+        destination = chars_dir / file.filename
+        with open(destination, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        config_mgr.set("avatar", "character_file", file.filename)
+        return {
+            "success": True,
+            "filename": file.filename,
+            "size_mb": round(destination.stat().st_size / (1024 * 1024), 1)
+        }
 
 
 @app.post("/api/characters/select")

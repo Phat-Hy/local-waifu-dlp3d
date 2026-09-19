@@ -1456,7 +1456,8 @@ window.addEventListener("drop", async (e) => {
   e.preventDefault();
   if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
     const file = e.dataTransfer.files[0];
-    if (file.name.toLowerCase().endsWith(".glb") || file.name.toLowerCase().endsWith(".gltf")) {
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".glb") || name.endsWith(".gltf") || name.endsWith(".pmx") || name.endsWith(".pmd") || name.endsWith(".zip")) {
       await uploadAndLoadCharacter(file);
     }
   }
