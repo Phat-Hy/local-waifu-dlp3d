@@ -40,7 +40,7 @@ Built upon the open-source foundations of [**DLP3D (Digital Life Project 2)**](h
 ## ✨ Key Features
 
 ### 1. 🎭 3D Avatar & Procedural Motion Engine
-* **Hololive & MMD PMX Support**: Native rendering of high-fidelity MMD models (including Shiori Novella) powered by `babylon-mmd` and Babylon.js.
+* **MMD PMX & GLB Avatar Support**: Native rendering of high-fidelity MMD (`.pmx`, `.pmd`) and GLB character models powered by `babylon-mmd` and Babylon.js.
 * **Physics & Secondary Motion**: Real-time rigid-body physics for hair, ribbons, clothing, and accessories.
 * **Biological Motion System**: Procedural chest breathing, gentle contrapposto weight shifting, cervical dual-joint articulation, and natural eye saccades/auto-blinks.
 * **Quaternion Delta Posing**: Calibrated feminine standing A-pose with relaxed finger curls, eliminating limb drift and awkward T-poses.
@@ -179,7 +179,7 @@ local-waifu-dlp3d/
 │   │   └── download_fast.py  # Multi-threaded checkpoint downloader
 │   └── cosyvoice/            # CosyVoice diffusion voice cloning service (:50000)
 ├── voices/                   # Reference audio samples for voice cloning
-│   └── shiori_reference_calm.wav # Calibrated clean voice prompt
+│   └── .gitkeep              # Place your custom reference audio (.wav) here
 ├── run.ps1                   # 1-Click automated launcher
 └── config.json               # Active runtime configuration
 ```
@@ -203,11 +203,11 @@ local-waifu-dlp3d/
   },
   "tts": {
     "engine": "f5-tts",
-    "active_voice_path": "voices/shiori_reference_calm.wav",
+    "active_voice_path": "voices/reference.wav",
     "speed": 1.0
   },
   "avatar": {
-    "character_file": "ShioriNovella/ShioriNovella.pmx",
+    "character_file": "FNN-default_296.glb",
     "enable_cloth_simulation": true
   }
 }
@@ -237,11 +237,11 @@ This project stands on the shoulders of incredible open-source innovations. Hear
 * **[noname0310/babylon-mmd](https://github.com/noname0310/babylon-mmd)** — MMD `.pmx` model loader, SDEF physics, and Japanese morph runtime for Babylon.js.
 * **[FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice)** — Expressive multi-lingual voice synthesis framework.
 * **[ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)** / **[Ollama](https://ollama.ai)** — Ultra-fast local GGUF inference and quantization.
-* **[Cover Corp / Hololive Production](https://hololivepro.com)** — Original character design and 3D MMD assets for Shiori Novella (used under Hololive Derivative Works Guidelines).
 
 ---
 
-## 📄 License
+## 📄 License & Disclaimer
 
 This project is open-source and released under the [MIT License](LICENSE).
-3D character models and voice assets belong to their respective copyright holders (Cover Corp / Hololive Production).
+
+Third-party 3D character models and reference audio clips remain the exclusive intellectual property of their respective creators and rights holders and are **NOT** distributed with this repository. Users must supply their own avatars and audio files for personal use.

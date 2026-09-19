@@ -1282,14 +1282,14 @@ async function loadConfig() {
     if (cfg.tts?.voice_name && voicePresetSelect) {
       voicePresetSelect.value = cfg.tts.voice_name;
     }
-    const targetChar = cfg.avatar?.character_file || "ShioriNovella/ShioriNovella.pmx";
+    const targetChar = cfg.avatar?.character_file || "FNN-default_296.glb";
     if (!currentCharacterFile || currentCharacterFile !== targetChar) {
       loadCharacterModel(targetChar);
     }
   } catch (e) {
     console.error("Config load error:", e);
     if (!currentCharacterFile) {
-      loadCharacterModel("ShioriNovella/ShioriNovella.pmx");
+      loadCharacterModel("FNN-default_296.glb");
     }
   }
 }

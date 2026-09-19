@@ -128,12 +128,13 @@ Special thanks to the authors and maintainers of the following open-source works
   Multi-lingual speech generation research.
 - llama.cpp / Ollama: https://github.com/ggerganov/llama.cpp
   High-performance local GGUF inference engine.
-- Cover Corp / Hololive Production: https://hololivepro.com
-  Character design and original MMD assets for Shiori Novella.
 
 -------------------------------------------------------------------------------
-7. LICENSE
+7. LICENSE & DISCLAIMER
 -------------------------------------------------------------------------------
-Released under the MIT License. Character models and voice materials belong to
-their respective copyright holders (Cover Corp / Hololive Production).
+Released under the MIT License.
+Third-party 3D character models and reference audio clips remain the exclusive
+intellectual property of their respective creators and rights holders and are
+NOT distributed with this repository. Users must supply their own avatars
+and audio files for personal use.
 ===============================================================================

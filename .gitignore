@@ -34,10 +34,15 @@ tmp/
 temp/
 _dlp3d_upstream/
 _dlp3d_orchestrator/
-# Voice references (whitelist lightweight sample)
+# Voice references (ignore all audio files)
 voices/*
 !voices/.gitkeep
-!voices/shiori_reference_calm.wav
+
+# Custom & Copyrighted 3D Avatar Models
+frontend/characters/ShioriNovella/
+frontend/characters/Phainon/
+frontend/characters/*/*.pmx
+frontend/characters/*/*.pmd
 
 # Services Venvs & Pretrained Models
 services/cosyvoice/venv/
