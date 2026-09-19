@@ -521,6 +521,10 @@ textarea {
   scrollbar-width: none;
 }
 
+.quick-motions-bar.hidden {
+  display: none !important;
+}
+
 .quick-motions-bar::-webkit-scrollbar {
   display: none;
 }

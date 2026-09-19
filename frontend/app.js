@@ -490,7 +490,7 @@ function initBabylon() {
       let lWristYaw = 0;
       let rWristYaw = 0;
 
-      // 4. Contextual Conversational Gestures
+      // 4. Contextual Conversational Gestures (Natural Anime Body Language)
       if (currentGesture.name !== "none") {
         const gElapsed = animTime - currentGesture.startTime;
         const gDuration = currentGesture.duration;
@@ -501,118 +501,72 @@ function initBabylon() {
           const gSin = Math.sin(p * Math.PI);
 
           if (currentGesture.name === "wave") {
-            // High, joyful anime greeting wave beside head with waving wrist and spread fingers
-            const handWave = Math.sin(p * 14.0) * 0.45;
-            rArmPitch = 0.35 * gSin;
-            rArmYaw = -0.35 * gSin;
-            rArmRoll = -1.85 * gSin;
-            rElbowYaw = -1.55 * gSin;
-            rElbowRoll = -0.20 * gSin;
+            // Gentle, cute idol greeting wave: soft arm lift in front of chest, delicate wrist flutter
+            const handWave = Math.sin(p * 12.0) * 0.16;
+            rArmPitch = 0.10 * gSin;
+            rArmYaw = -0.15 * gSin;
+            rArmRoll = -0.38 * gSin;
+            rElbowYaw = -0.50 * gSin;
             rWristYaw = handWave * gSin;
-            rWristFlex = 0.15 * gSin;
-            totalHeadPitch += -0.015 * gSin;
-            totalHeadRoll += -0.035 * gSin;
-            if (activeBones.fingers && activeBones.fingers.length > 0) {
-              for (const f of activeBones.fingers) {
-                if (!f.isLeft) setBoneEuler(f.bone, 0, 0, -0.15 * gSin);
-              }
-            }
+            rWristFlex = 0.06 * gSin;
+            totalHeadPitch += -0.012 * gSin;
+            totalHeadRoll += -0.025 * gSin;
           } else if (currentGesture.name === "nod") {
             // Attentive double nod; arms stay relaxed at sides
             const nodPitch = Math.sin(p * 12.0) * 0.075 * (1.0 - p * 0.3);
             totalHeadPitch += nodPitch;
           } else if (currentGesture.name === "tilt") {
             // Adorable curious head tilt with subtle spine counter-balance
-            totalHeadRoll += gSin * 0.042;
+            totalHeadRoll += gSin * 0.040;
             totalHeadPitch += -0.015 * gSin;
             if (activeBones.spine) setBoneEuler(activeBones.spine, 0, 0, -gSin * 0.018);
           } else if (currentGesture.name === "think") {
-            // Thoughtful chin touch: right hand smoothly elevates to touch cheek/chin
+            // Pondering thought: head tilts thoughtfully with contemplative gaze shift
             totalHeadPitch += 0.025 * gSin;
-            totalHeadYaw += 0.06 * gSin;
-            totalHeadRoll += -0.03 * gSin;
-            rArmPitch = 0.35 * gSin;
-            rArmYaw = -0.55 * gSin;
-            rArmRoll = -1.05 * gSin;
-            rElbowYaw = -1.75 * gSin;
-            rElbowRoll = -0.25 * gSin;
-            rWristFlex = 0.35 * gSin;
-            rWristYaw = -0.20 * gSin;
+            totalHeadYaw += 0.05 * gSin;
+            totalHeadRoll += -0.035 * gSin;
+            gazeState.targetX = 0.035;
+            gazeState.targetY = -0.035;
           } else if (currentGesture.name === "shy") {
-            // Demure two-handed front clasp in front of torso
-            totalHeadPitch += 0.05 * gSin;
-            totalHeadRoll += 0.015 * gSin;
-            lArmPitch = -0.25 * gSin;
-            lArmYaw = 0.50 * gSin;
-            lArmRoll = 0.65 * gSin;
-            rArmPitch = 0.25 * gSin;
-            rArmYaw = -0.50 * gSin;
-            rArmRoll = -0.65 * gSin;
-            lElbowYaw = 1.30 * gSin;
-            rElbowYaw = -1.30 * gSin;
-            lWristFlex = 0.20 * gSin;
-            rWristFlex = -0.20 * gSin;
+            // Demure anime bashfulness: gentle head dip, bashful gaze, subtle shoulder rise
+            totalHeadPitch += 0.045 * gSin;
+            totalHeadRoll += 0.025 * gSin;
+            gazeState.targetY = 0.035;
+            gazeState.targetX = -0.025;
           } else if (currentGesture.name === "excited") {
-            // Joyful cheer: both arms raised high with celebratory bounce
-            const bounce = Math.abs(Math.sin(p * 14.0)) * 0.035;
-            totalHeadPitch += -bounce * 1.8;
-            if (activeBones.chest) setBoneEuler(activeBones.chest, -bounce * 1.2, 0, 0);
-            lArmPitch = -0.35 * gSin;
-            lArmYaw = 0.40 * gSin;
-            lArmRoll = 1.75 * gSin;
-            rArmPitch = 0.35 * gSin;
-            rArmYaw = -0.40 * gSin;
-            rArmRoll = -1.75 * gSin;
-            lElbowYaw = 1.35 * gSin;
-            rElbowYaw = -1.35 * gSin;
-            lWristFlex = -0.30 * gSin;
-            rWristFlex = 0.30 * gSin;
+            // Joyful cheer: bouncy celebratory vertical rhythm with smiling eyes
+            const bounce = Math.abs(Math.sin(p * 12.0)) * 0.025;
+            totalHeadPitch += -bounce * 1.5;
+            if (activeBones.chest) setBoneEuler(activeBones.chest, -bounce * 1.0, 0, 0);
           } else if (currentGesture.name === "shrug") {
-            // Expressive anime shrug: shoulders elevate, hands open outward, cute head tilt
-            totalHeadRoll += gSin * 0.038;
-            lArmPitch = -0.20 * gSin;
-            rArmPitch = 0.20 * gSin;
-            lArmYaw = 0.30 * gSin;
-            rArmYaw = -0.30 * gSin;
-            lArmRoll = 0.45 * gSin;
-            rArmRoll = -0.45 * gSin;
-            lElbowYaw = 0.75 * gSin;
-            rElbowYaw = -0.75 * gSin;
-            lWristFlex = -0.30 * gSin;
-            rWristFlex = 0.30 * gSin;
+            // Expressive anime shrug: gentle shoulder lift and playful head tilt
+            totalHeadRoll += gSin * 0.035;
           } else if (currentGesture.name === "lean") {
             // Leans upper body warmly closer towards user/camera
-            const lean = gSin * 0.12;
-            totalHeadPitch += -lean * 0.6;
-            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.7, 0, 0);
-            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.9, 0, 0);
+            const lean = gSin * 0.10;
+            totalHeadPitch += -lean * 0.5;
+            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
+            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.8, 0, 0);
           } else if (currentGesture.name === "laugh") {
-            // Cute giggle: right hand covers mouth, subtle chest giggle vibration
-            const giggle = Math.sin(p * 22.0) * 0.012;
-            totalHeadPitch += -0.02 * gSin + giggle * 0.5;
-            totalHeadRoll += -0.025 * gSin;
+            // Cute giggle: cheerful head nod and subtle chest giggle vibration
+            const giggle = Math.sin(p * 18.0) * 0.010;
+            totalHeadPitch += giggle;
             if (activeBones.chest) setBoneEuler(activeBones.chest, giggle, 0, 0);
-            rArmPitch = 0.30 * gSin;
-            rArmYaw = -0.50 * gSin;
-            rArmRoll = -1.10 * gSin;
-            rElbowYaw = -1.80 * gSin;
-            rWristFlex = 0.35 * gSin;
-            rWristYaw = -0.20 * gSin;
           }
         } else {
           currentGesture.name = "none";
         }
       }
 
-      // 5. Scapulohumeral Rhythm (Shoulders naturally elevate when arms raise)
+      // 5. Scapulohumeral Rhythm (Shoulders naturally elevate when arms raise or during shrug)
       const shoulderLift = breathPhase * 0.005;
       const gSinElev = currentGesture.name !== "none" ? Math.sin((animTime - currentGesture.startTime) / currentGesture.duration * Math.PI) : 0;
-      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.28 * gSinElev : 0)
-                               + (currentGesture.name === "shrug" ? 0.30 * gSinElev : 0)
-                               + (currentGesture.name === "excited" ? 0.25 * gSinElev : 0);
+      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.08 * gSinElev : 0)
+                               + (currentGesture.name === "shrug" ? 0.20 * gSinElev : 0)
+                               + (currentGesture.name === "shy" ? 0.10 * gSinElev : 0);
 
-      const rShoulderElev = Math.abs(rArmRoll) * 0.12 + gestureShoulderLift;
-      const lShoulderElev = Math.abs(lArmRoll) * 0.12 + (currentGesture.name === "shrug" || currentGesture.name === "excited" ? gestureShoulderLift : 0);
+      const rShoulderElev = Math.abs(rArmRoll) * 0.10 + gestureShoulderLift;
+      const lShoulderElev = (currentGesture.name === "shrug" || currentGesture.name === "shy" ? gestureShoulderLift : 0);
       if (activeBones.leftShoulder) {
         setBoneEuler(activeBones.leftShoulder, 0, 0, -lShoulderElev - shoulderLift);
       }
@@ -1794,11 +1748,10 @@ if (uploadMotionBtn && motionFileInput) {
 const openMotionsBtn = document.getElementById("open-motions-btn");
 if (openMotionsBtn) {
   openMotionsBtn.onclick = () => {
-    settingsDrawer.classList.remove("hidden");
-    fetchMotions();
-    fetchCharacters();
-    const section = document.getElementById("motions-settings-section");
-    if (section) section.scrollIntoView({ behavior: "smooth" });
+    const quickBar = document.getElementById("quick-motions-bar");
+    if (quickBar) {
+      quickBar.classList.toggle("hidden");
+    }
   };
 }
 
