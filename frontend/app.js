@@ -186,6 +186,13 @@ function initBabylon() {
     duration: 1.5
   };
 
+  let wristSpringLag = {
+    leftPitch: 0,
+    leftRoll: 0,
+    rightPitch: 0,
+    rightRoll: 0
+  };
+
   // Multi-harmonic non-periodic fractal noise function for biological human motion
   function organicHarmonic(t, speed, seed) {
     return Math.sin(t * speed + seed) * 0.55
@@ -267,156 +274,174 @@ function initBabylon() {
       activeBones.rightEye.setRotationQuaternion(activeBones.rightEye._bindQuat.clone(), BABYLON.Space.LOCAL);
     }
 
-    // --- Layer 1: Organic Multi-Joint Respiration & Contrapposto Weight Shift ---
-    const breathFreq = isPlayingAudio ? 2.1 : 1.55;
-    const breathPhase = Math.sin(animTime * breathFreq);
-    const breathPitch = breathPhase * (0.012 + organicHarmonic(animTime, 0.28, 2.1) * 0.005);
-    const chestVocalLift = -liveSpeechEnergy * 0.018 - speechCadenceBeat * 0.012;
+    const hasEmbeddedMocap = currentAnimationGroups && currentAnimationGroups.length > 0;
 
-    const swayLateral = organicHarmonic(animTime, 0.48, 1.3) * 0.009;
-    const swayYaw = organicHarmonic(animTime, 0.32, 4.7) * 0.006;
-    const swayRoll = organicHarmonic(animTime, 0.42, 2.8) * 0.006;
-
-    // Weight shift contrapposto across hips and spine
-    const hipContrapposto = Math.sin(animTime * 0.38) * 0.012;
-    if (activeBones.hips) {
-      setBoneEuler(activeBones.hips, 0.02, hipContrapposto * 0.5, -0.022 + hipContrapposto);
-    }
-    if (activeBones.spine) {
-      setBoneEuler(activeBones.spine, breathPitch * 0.4 - 0.015, swayYaw * 0.35, 0.020 - hipContrapposto * 0.9 + swayRoll * 0.35);
-    }
-    if (activeBones.chest) {
-      setBoneEuler(activeBones.chest, breathPitch * 0.85 + chestVocalLift, swayYaw * 0.5, swayRoll * 0.5);
-    }
-    // Subtle shoulder rise on inhale
-    const shoulderLift = breathPhase * 0.005;
-    if (activeBones.leftShoulder) {
-      setBoneEuler(activeBones.leftShoulder, 0.02, 0, -0.04 - shoulderLift);
-    }
-    if (activeBones.rightShoulder) {
-      setBoneEuler(activeBones.rightShoulder, 0.02, 0, 0.04 + shoulderLift);
-    }
-
-    // --- Layer 2: Cervical Spine (Two-Joint Head & Neck Articulation) + Syllables & Pitch ---
+    // --- Syllables & Speech Metrics ---
     const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.032) + (speechCadenceBeat * 0.028);
     const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0012 : 0;
     const speechTilt = Math.sin(animTime * 2.3) * liveSpeechEnergy * 0.022;
 
-    const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.014;
-    const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
-    const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
-
-    // Total head orientation
-    let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
-    let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
-    let totalHeadRoll = idleHeadRoll + speechTilt;
-
-    // --- Layer 3: Dynamic Co-Speech Hand & Arm Phrasing (Arms & Forearms) ---
-    const armSpeechEnergy = liveSpeechEnergy * 0.08;
-    const armBreathSway = Math.sin(animTime * 1.55) * 0.010;
-
-    let lArmPitch = armSpeechEnergy * 0.3;
-    let lArmYaw = 0;
-    let lArmRoll = armBreathSway + armSpeechEnergy * 0.5;
-
-    let rArmPitch = armSpeechEnergy * 0.3;
-    let rArmYaw = 0;
-    let rArmRoll = -armBreathSway - armSpeechEnergy * 0.5;
-
-    let lElbowFlex = armSpeechEnergy * 0.25;
-    let rElbowFlex = -armSpeechEnergy * 0.25;
-
-    let lWristFlex = 0;
-    let rWristFlex = 0;
-
-    // --- Layer 4: Contextual Conversational Gestures ---
-    if (currentGesture.name !== "none") {
-      const gElapsed = animTime - currentGesture.startTime;
-      const gDuration = currentGesture.duration;
-
-      if (gElapsed < gDuration) {
-        const rawP = gElapsed / gDuration;
-        const p = rawP * rawP * (3.0 - 2.0 * rawP); // Cubic Hermite smoothstep
-        const gSin = Math.sin(p * Math.PI);
-
-        if (currentGesture.name === "wave") {
-          const handWave = Math.sin(p * 22.0) * 0.28;
-          rArmPitch = -0.45 * gSin;
-          rArmRoll = -0.92 * gSin;
-          rArmYaw = handWave * 0.2;
-          rElbowFlex = -0.75 * gSin;
-          rWristFlex = handWave * 0.35;
-          totalHeadPitch += -0.02 * gSin;
-          totalHeadYaw += -0.04 * gSin;
-          totalHeadRoll += 0.03 * gSin;
-        } else if (currentGesture.name === "nod") {
-          const nodPitch = Math.sin(p * 14.0) * 0.075 * (1.0 - p * 0.4);
-          totalHeadPitch += nodPitch;
-        } else if (currentGesture.name === "tilt") {
-          const tiltRoll = gSin * 0.13;
-          totalHeadRoll += tiltRoll;
-        } else if (currentGesture.name === "think") {
-          totalHeadPitch += -0.06 * gSin;
-          totalHeadYaw += 0.08 * gSin;
-          totalHeadRoll += 0.05 * gSin;
-          rArmPitch = 0.32 * gSin;
-          rArmRoll = -0.65 * gSin;
-          rElbowFlex = -0.55 * gSin;
-          rWristFlex = 0.18 * gSin;
-        } else if (currentGesture.name === "shy") {
-          totalHeadPitch += 0.08 * gSin;
-          totalHeadRoll += 0.04 * gSin;
-          lArmRoll = 0.18 * gSin;
-          rArmRoll = -0.18 * gSin;
-        } else if (currentGesture.name === "excited") {
-          const bounce = Math.abs(Math.sin(p * 15.0)) * 0.032;
-          totalHeadPitch += bounce * 1.3;
-          lArmRoll = -bounce * 2.2;
-          rArmRoll = bounce * 2.2;
-        } else if (currentGesture.name === "shrug") {
-          const shrug = gSin * 0.11;
-          totalHeadRoll += shrug * 0.4;
-          lElbowFlex = 0.2 * gSin;
-          rElbowFlex = -0.2 * gSin;
-          lWristFlex = 0.2 * gSin;
-          rWristFlex = -0.2 * gSin;
-        } else if (currentGesture.name === "lean") {
-          const lean = gSin * 0.07;
-          totalHeadPitch += -lean * 0.5;
-          if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
-          if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.7, 0, 0);
-        }
-      } else {
-        currentGesture.name = "none";
+    if (hasEmbeddedMocap) {
+      // ══════════════════════════════════════════════════════════════
+      // MODE A: EMBEDDED MOCAP / ANIMATION GROUP (e.g. Grok Ms. Ani, DLP3D GLBs)
+      // Let the 1000+ channel mocap track animate full-body fluidly.
+      // Apply conversational speech head nodding and gaze additively.
+      // ══════════════════════════════════════════════════════════════
+      if (activeBones.head) {
+        const headPitchAdd = syllableNod * 0.45 + pitchLift * 0.5 + gazeState.currentY * 0.35;
+        const headYawAdd = gazeState.currentX * 0.45;
+        activeBones.head.rotate(BABYLON.Axis.X, headPitchAdd, BABYLON.Space.LOCAL);
+        activeBones.head.rotate(BABYLON.Axis.Y, headYawAdd, BABYLON.Space.LOCAL);
       }
-    }
+      if (activeBones.neck) {
+        activeBones.neck.rotate(BABYLON.Axis.X, syllableNod * 0.2, BABYLON.Space.LOCAL);
+        activeBones.neck.rotate(BABYLON.Axis.Z, speechTilt * 0.3, BABYLON.Space.LOCAL);
+      }
+    } else {
+      // ══════════════════════════════════════════════════════════════
+      // MODE B: PROCEDURAL BIOMECHANICS & HUMAN MOTION (MMD PMX models)
+      // Multi-joint respiration, scapulohumeral rhythm, and spring inertia.
+      // ══════════════════════════════════════════════════════════════
 
-    // Apply Cervical Spine Articulation (30% neck, 70% head)
-    if (activeBones.neck) {
-      setBoneEuler(activeBones.neck, totalHeadPitch * 0.30, totalHeadYaw * 0.30, totalHeadRoll * 0.30);
-    }
-    if (activeBones.head) {
-      setBoneEuler(activeBones.head, totalHeadPitch * 0.70, totalHeadYaw * 0.70, totalHeadRoll * 0.70);
-    }
+      // 1. Respiration & Lissajous Weight Shift
+      const breathFreq = isPlayingAudio ? 2.1 : 1.55;
+      const breathPhase = Math.sin(animTime * breathFreq);
+      const breathPitch = breathPhase * (0.012 + organicHarmonic(animTime, 0.28, 2.1) * 0.005);
+      const chestVocalLift = -liveSpeechEnergy * 0.018 - speechCadenceBeat * 0.012;
 
-    // Apply Arms, Elbows, and Wrists
-    if (activeBones.leftArm) {
-      setBoneEuler(activeBones.leftArm, lArmPitch, lArmYaw, lArmRoll);
-    }
-    if (activeBones.rightArm) {
-      setBoneEuler(activeBones.rightArm, rArmPitch, rArmYaw, rArmRoll);
-    }
-    if (activeBones.leftElbow) {
-      setBoneEuler(activeBones.leftElbow, 0, lElbowFlex, 0);
-    }
-    if (activeBones.rightElbow) {
-      setBoneEuler(activeBones.rightElbow, 0, rElbowFlex, 0);
-    }
-    if (activeBones.leftWrist) {
-      setBoneEuler(activeBones.leftWrist, 0, 0, lWristFlex);
-    }
-    if (activeBones.rightWrist) {
-      setBoneEuler(activeBones.rightWrist, 0, 0, rWristFlex);
+      const swayLateral = organicHarmonic(animTime, 0.48, 1.3) * 0.009;
+      const swayYaw = organicHarmonic(animTime, 0.32, 4.7) * 0.006;
+      const swayRoll = organicHarmonic(animTime, 0.42, 2.8) * 0.006;
+
+      const hipContrapposto = Math.sin(animTime * 0.38) * 0.012;
+      if (activeBones.hips) {
+        setBoneEuler(activeBones.hips, 0.02, hipContrapposto * 0.5, -0.022 + hipContrapposto);
+      }
+      if (activeBones.spine) {
+        setBoneEuler(activeBones.spine, breathPitch * 0.4 - 0.015, swayYaw * 0.35, 0.020 - hipContrapposto * 0.9 + swayRoll * 0.35);
+      }
+      if (activeBones.chest) {
+        setBoneEuler(activeBones.chest, breathPitch * 0.85 + chestVocalLift, swayYaw * 0.5, swayRoll * 0.5);
+      }
+
+      // 2. Head & Neck Articulation
+      const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.014;
+      const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
+      const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
+
+      let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
+      let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
+      let totalHeadRoll = idleHeadRoll + speechTilt;
+
+      // 3. Dynamic Co-Speech Hand & Arm Phrasing
+      const armSpeechEnergy = liveSpeechEnergy * 0.08;
+      const armBreathSway = Math.sin(animTime * 1.55) * 0.010;
+
+      let lArmPitch = armSpeechEnergy * 0.3;
+      let lArmYaw = 0;
+      let lArmRoll = armBreathSway + armSpeechEnergy * 0.5;
+
+      let rArmPitch = armSpeechEnergy * 0.3;
+      let rArmYaw = 0;
+      let rArmRoll = -armBreathSway - armSpeechEnergy * 0.5;
+
+      let lElbowFlex = armSpeechEnergy * 0.25;
+      let rElbowFlex = -armSpeechEnergy * 0.25;
+
+      let lWristFlex = 0;
+      let rWristFlex = 0;
+
+      // 4. Contextual Conversational Gestures
+      if (currentGesture.name !== "none") {
+        const gElapsed = animTime - currentGesture.startTime;
+        const gDuration = currentGesture.duration;
+
+        if (gElapsed < gDuration) {
+          const rawP = gElapsed / gDuration;
+          const p = rawP * rawP * (3.0 - 2.0 * rawP); // Cubic Hermite smoothstep
+          const gSin = Math.sin(p * Math.PI);
+
+          if (currentGesture.name === "wave") {
+            const handWave = Math.sin(p * 18.0) * 0.32;
+            rArmPitch = -0.38 * gSin;
+            rArmRoll = -0.85 * gSin;
+            rArmYaw = handWave * 0.15;
+            rElbowFlex = -0.65 * gSin;
+            rWristFlex = handWave * 0.40;
+            totalHeadPitch += -0.03 * gSin;
+            totalHeadRoll += 0.04 * gSin;
+          } else if (currentGesture.name === "nod") {
+            const nodPitch = Math.sin(p * 14.0) * 0.075 * (1.0 - p * 0.4);
+            totalHeadPitch += nodPitch;
+          } else if (currentGesture.name === "tilt") {
+            totalHeadRoll += gSin * 0.14;
+          } else if (currentGesture.name === "think") {
+            totalHeadPitch += -0.06 * gSin;
+            totalHeadYaw += 0.08 * gSin;
+            totalHeadRoll += 0.05 * gSin;
+            rArmPitch = 0.28 * gSin;
+            rArmRoll = -0.58 * gSin;
+            rElbowFlex = -0.50 * gSin;
+            rWristFlex = 0.15 * gSin;
+          } else if (currentGesture.name === "shy") {
+            totalHeadPitch += 0.08 * gSin;
+            totalHeadRoll += 0.04 * gSin;
+            lArmRoll = 0.18 * gSin;
+            rArmRoll = -0.18 * gSin;
+          } else if (currentGesture.name === "excited") {
+            const bounce = Math.abs(Math.sin(p * 15.0)) * 0.032;
+            totalHeadPitch += bounce * 1.3;
+            lArmRoll = -bounce * 2.2;
+            rArmRoll = bounce * 2.2;
+          } else if (currentGesture.name === "shrug") {
+            totalHeadRoll += gSin * 0.08;
+            lElbowFlex = 0.2 * gSin;
+            rElbowFlex = -0.2 * gSin;
+            lWristFlex = 0.2 * gSin;
+            rWristFlex = -0.2 * gSin;
+          } else if (currentGesture.name === "lean") {
+            const lean = gSin * 0.07;
+            totalHeadPitch += -lean * 0.5;
+            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
+            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.7, 0, 0);
+          }
+        } else {
+          currentGesture.name = "none";
+        }
+      }
+
+      // 5. Scapulohumeral Rhythm (Shoulders naturally elevate when arms raise)
+      const shoulderLift = breathPhase * 0.005;
+      const rShoulderElev = rArmPitch * -0.20 + Math.abs(rArmRoll) * 0.15;
+      const lShoulderElev = lArmPitch * -0.20 + Math.abs(lArmRoll) * 0.15;
+      if (activeBones.leftShoulder) {
+        setBoneEuler(activeBones.leftShoulder, 0.02, 0, -0.04 - lShoulderElev - shoulderLift);
+      }
+      if (activeBones.rightShoulder) {
+        setBoneEuler(activeBones.rightShoulder, 0.02, 0, 0.04 + rShoulderElev + shoulderLift);
+      }
+
+      // 6. Cervical Spine Articulation (30% neck, 70% head)
+      if (activeBones.neck) {
+        setBoneEuler(activeBones.neck, totalHeadPitch * 0.30, totalHeadYaw * 0.30, totalHeadRoll * 0.30);
+      }
+      if (activeBones.head) {
+        setBoneEuler(activeBones.head, totalHeadPitch * 0.70, totalHeadYaw * 0.70, totalHeadRoll * 0.70);
+      }
+
+      // 7. Follow-Through Wrist Lag
+      wristSpringLag.rightPitch += (rArmPitch - wristSpringLag.rightPitch) * 0.18;
+      wristSpringLag.leftPitch += (lArmPitch - wristSpringLag.leftPitch) * 0.18;
+      const rLag = (rArmPitch - wristSpringLag.rightPitch) * 0.45;
+      const lLag = (lArmPitch - wristSpringLag.leftPitch) * 0.45;
+
+      // 8. Apply Arms, Elbows, and Wrists
+      if (activeBones.leftArm) setBoneEuler(activeBones.leftArm, lArmPitch, lArmYaw, lArmRoll);
+      if (activeBones.rightArm) setBoneEuler(activeBones.rightArm, rArmPitch, rArmYaw, rArmRoll);
+      if (activeBones.leftElbow) setBoneEuler(activeBones.leftElbow, 0, lElbowFlex, 0);
+      if (activeBones.rightElbow) setBoneEuler(activeBones.rightElbow, 0, rElbowFlex, 0);
+      if (activeBones.leftWrist) setBoneEuler(activeBones.leftWrist, lLag, 0, lWristFlex);
+      if (activeBones.rightWrist) setBoneEuler(activeBones.rightWrist, rLag, 0, rWristFlex);
     }
 
     // --- Layer 4.5: Secondary Hair & Ribbon Dynamic Sway ---
@@ -525,14 +550,24 @@ async function loadCharacterModel(filename) {
     // Relax horizontal T-Pose into natural standing pose
     initHumanSkeletonAndPose(result);
 
-    // Autoplay embedded GLB animation groups (DLP3D avatars)
+    // Autoplay embedded GLB animation groups (DLP3D / Grok avatars)
     if (result.animationGroups && result.animationGroups.length > 0) {
       currentAnimationGroups = result.animationGroups;
-      currentAnimationGroups.forEach(ag => {
-        ag.stop();
-        ag.play(true);
-      });
-      console.log(`[Avatar] Started ${result.animationGroups.length} embedded animation tracks.`);
+      // Stop all tracks first to prevent bone fighting
+      currentAnimationGroups.forEach(ag => ag.stop());
+
+      // Select primary skeletal track with the most targeted animation channels
+      let primaryTrack = currentAnimationGroups[0];
+      for (const ag of currentAnimationGroups) {
+        if (ag.targetedAnimations && ag.targetedAnimations.length > (primaryTrack.targetedAnimations ? primaryTrack.targetedAnimations.length : 0)) {
+          primaryTrack = ag;
+        }
+      }
+
+      primaryTrack.weight = 1.0;
+      primaryTrack.speedRatio = 1.0;
+      primaryTrack.play(true);
+      console.log(`[Avatar] Playing primary mocap track "${primaryTrack.name}" with ${primaryTrack.targetedAnimations ? primaryTrack.targetedAnimations.length : 0} channels.`);
     } else {
       currentAnimationGroups = [];
     }
