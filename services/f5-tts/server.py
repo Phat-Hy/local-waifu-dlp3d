@@ -14,6 +14,18 @@ try:
 except Exception:
     pass
 
+# Ensure ffmpeg and ffprobe are in PATH for pydub and neural audio decoders
+scripts_dir = os.path.dirname(sys.executable)
+if os.path.exists(os.path.join(scripts_dir, "ffmpeg.exe")):
+    if scripts_dir not in os.environ["PATH"]:
+        os.environ["PATH"] = scripts_dir + os.pathsep + os.environ["PATH"]
+else:
+    for candidate in [r"G:\Program\Krita (x64)\bin", r"G:\Program\Ultimate Vocal Remover"]:
+        if os.path.exists(os.path.join(candidate, "ffmpeg.exe")):
+            if candidate not in os.environ["PATH"]:
+                os.environ["PATH"] = candidate + os.pathsep + os.environ["PATH"]
+            break
+
 from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
