@@ -76,15 +76,11 @@ function initMmdRuntime() {
 
       // Handle motion playback completion & seamless looping / return to idle
       mmdRuntime.onPauseAnimationObservable.add(() => {
-        if (isMotionLooping && currentMmdModel) {
+        if (isMotionLooping && currentMmdModel && currentMmdModel.currentAnimation) {
           mmdRuntime.seekAnimation(0);
           mmdRuntime.playAnimation();
         } else if (!isMotionLooping && currentMmdModel) {
-          if (isPlayingAudio) {
-            playVmdMotion("motions/talk.vmd", true);
-          } else {
-            playVmdMotion("motions/idle.vmd", true);
-          }
+          stopVmdMotion();
         }
       });
       console.log("[MMD] Babylon-MMD Runtime initialized successfully.");
@@ -92,6 +88,18 @@ function initMmdRuntime() {
       console.warn("[MMD] Could not initialize MmdRuntime:", e);
     }
   }
+}
+
+function stopVmdMotion() {
+  if (currentMmdModel && mmdRuntime) {
+    try {
+      mmdRuntime.pauseAnimation();
+      currentMmdModel.setRuntimeAnimation(null);
+    } catch (e) {}
+  }
+  activeMotionUrl = null;
+  updateActiveMotionUI(null);
+  console.log("[Motion] Returned to natural companion procedural mode.");
 }
 
 async function playVmdMotion(motionUrlOrFile, loop = false) {
@@ -107,6 +115,11 @@ async function playVmdMotion(motionUrlOrFile, loop = false) {
     isMotionLooping = loop;
     let anim = null;
     const cacheKey = typeof motionUrlOrFile === "string" ? motionUrlOrFile : (motionUrlOrFile.name || "custom_vmd");
+
+    // If already playing this motion in the same loop mode, don't restart from 0
+    if (activeMotionUrl === cacheKey && currentMmdModel.currentAnimation) {
+      return;
+    }
 
     if (cachedVmdMotions[cacheKey]) {
       anim = cachedVmdMotions[cacheKey];
@@ -302,35 +315,15 @@ function initBabylon() {
     const gName = gestureName.toLowerCase().trim();
     console.log(`[Avatar] Conversation Gesture Triggered: ${gName}`);
 
-    // If active MMD model is present, trigger mocap-level VMD motion
-    if (currentMmdModel) {
-      const vmdMap = {
-        "wave": "motions/wave.vmd",
-        "greet": "motions/wave.vmd",
-        "bow": "motions/bow.vmd",
-        "nod": "motions/nod.vmd",
-        "agree": "motions/nod.vmd",
-        "think": "motions/thinking.vmd",
-        "thinking": "motions/thinking.vmd",
-        "cheer": "motions/cheer.vmd",
-        "excited": "motions/cheer.vmd",
-        "happy": "motions/cheer.vmd",
-        "dance": "motions/circulation_dance.vmd",
-        "drink": "motions/drink.vmd",
-        "sneak": "motions/sneak.vmd",
-        "walk": "motions/walk.vmd"
-      };
-      if (vmdMap[gName]) {
-        playVmdMotion(vmdMap[gName], false);
-        return;
-      }
+    // If an MMD dance/VMD is currently playing, return to procedural mode for the gesture
+    if (currentMmdModel && currentMmdModel.currentAnimation) {
+      stopVmdMotion();
     }
 
-    // Procedural fallback
     currentGesture = {
       name: gName,
       startTime: animTime,
-      duration: gName === "wave" ? 2.6 : (gName === "excited" ? 2.0 : 1.8)
+      duration: gName === "wave" ? 2.8 : (gName === "excited" ? 2.2 : (gName === "think" ? 2.6 : 1.8))
     };
   };
 
@@ -402,34 +395,29 @@ function initBabylon() {
     const hasActiveMmdMotion = currentMmdModel && currentMmdModel.currentAnimation;
 
     // --- Syllables & Speech Metrics ---
-    const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.032) + (speechCadenceBeat * 0.028);
-    const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0012 : 0;
-    const speechTilt = Math.sin(animTime * 2.3) * liveSpeechEnergy * 0.022;
+    const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.024) + (speechCadenceBeat * 0.018);
+    const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0008 : 0;
+    const speechTilt = Math.sin(animTime * 1.5) * liveSpeechEnergy * 0.005;
 
     // --- Head Orientation & Saccadic Metrics ---
-    const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.014;
-    const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
-    const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
+    const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.012;
+    const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.014;
+    const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.004;
 
-    let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
-    let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
-    let totalHeadRoll = idleHeadRoll + speechTilt;
+    let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.45;
+    let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.55;
+    let totalHeadRoll = Math.max(-0.04, Math.min(0.04, idleHeadRoll + speechTilt));
 
     if (hasEmbeddedMocap || hasActiveMmdMotion) {
       // ══════════════════════════════════════════════════════════════
-      // MODE A: EMBEDDED MOCAP / ANIMATION GROUP (e.g. Grok Ms. Ani, DLP3D GLBs)
-      // Let the 1000+ channel mocap track animate full-body fluidly.
-      // Apply conversational speech head nodding and gaze additively.
+      // MODE A: EMBEDDED MOCAP / VMD DANCE (e.g. Grok Ms. Ani, MMD Dance)
+      // Let the mocap track animate full-body fluidly.
       // ══════════════════════════════════════════════════════════════
-      if (activeBones.head) {
-        const headPitchAdd = syllableNod * 0.45 + pitchLift * 0.5 + gazeState.currentY * 0.35;
-        const headYawAdd = gazeState.currentX * 0.45;
-        activeBones.head.rotate(BABYLON.Axis.X, headPitchAdd, BABYLON.Space.LOCAL);
-        activeBones.head.rotate(BABYLON.Axis.Y, headYawAdd, BABYLON.Space.LOCAL);
-      }
-      if (activeBones.neck) {
-        activeBones.neck.rotate(BABYLON.Axis.X, syllableNod * 0.2, BABYLON.Space.LOCAL);
-        activeBones.neck.rotate(BABYLON.Axis.Z, speechTilt * 0.3, BABYLON.Space.LOCAL);
+      if (activeBones.head && activeBones.head._bindQuat) {
+        const headPitchAdd = syllableNod * 0.30 + pitchLift * 0.3 + gazeState.currentY * 0.25;
+        const headYawAdd = gazeState.currentX * 0.30;
+        const delta = BABYLON.Quaternion.FromEulerAngles(headPitchAdd, headYawAdd, 0);
+        activeBones.head.setRotationQuaternion(activeBones.head._bindQuat.multiply(delta), BABYLON.Space.LOCAL);
       }
     } else {
       // ══════════════════════════════════════════════════════════════
@@ -470,8 +458,13 @@ function initBabylon() {
       let rArmYaw = 0;
       let rArmRoll = -armBreathSway - armSpeechEnergy * 0.5;
 
-      let lElbowFlex = armSpeechEnergy * 0.25;
-      let rElbowFlex = -armSpeechEnergy * 0.25;
+      let lElbowPitch = armSpeechEnergy * 0.20;
+      let lElbowYaw = 0;
+      let lElbowRoll = 0;
+
+      let rElbowPitch = armSpeechEnergy * 0.20;
+      let rElbowYaw = 0;
+      let rElbowRoll = 0;
 
       let lWristFlex = 0;
       let rWristFlex = 0;
@@ -489,72 +482,74 @@ function initBabylon() {
           const gSin = Math.sin(p * Math.PI);
 
           if (currentGesture.name === "wave") {
-            // Full human waving gesture: arm raises high, elbow bends upright, hand waves beside head
-            const handWave = Math.sin(p * 20.0) * 0.45;
-            rArmPitch = -0.55 * gSin;
-            rArmRoll = -1.45 * gSin;
-            rArmYaw = 0.25 * gSin;
-            rElbowFlex = -1.85 * gSin;
-            rWristYaw = handWave * 0.50 * gSin;
-            rWristFlex = (0.28 + handWave * 0.35) * gSin;
-            totalHeadPitch += -0.04 * gSin;
-            totalHeadRoll += 0.08 * gSin;
+            // Cute, fluid anime greeting wave: arm raises high, elbow hinges naturally, hand waves beside head
+            const handWave = Math.sin(p * 18.0) * 0.35;
+            rArmPitch = -0.45 * gSin;
+            rArmRoll = -0.85 * gSin;
+            rArmYaw = -0.18 * gSin;
+            rElbowPitch = -1.25 * gSin;
+            rElbowRoll = -0.22 * gSin;
+            rWristYaw = handWave * gSin;
+            rWristFlex = 0.15 * gSin;
+            totalHeadPitch += -0.015 * gSin;
+            totalHeadRoll += 0.025 * gSin;
           } else if (currentGesture.name === "nod") {
-            const nodPitch = Math.sin(p * 14.0) * 0.11 * (1.0 - p * 0.35);
+            const nodPitch = Math.sin(p * 12.0) * 0.06 * (1.0 - p * 0.35);
             totalHeadPitch += nodPitch;
           } else if (currentGesture.name === "tilt") {
-            totalHeadRoll += gSin * 0.18;
-            totalHeadPitch += -0.03 * gSin;
+            totalHeadRoll += gSin * 0.045;
+            totalHeadPitch += -0.015 * gSin;
           } else if (currentGesture.name === "think") {
-            // Thoughtful chin-touch gesture: hand lifts to chin, elbow tucks, thoughtful gaze
-            totalHeadPitch += 0.06 * gSin;
-            totalHeadYaw += 0.12 * gSin;
-            totalHeadRoll += -0.10 * gSin;
-            rArmPitch = -0.65 * gSin;
-            rArmRoll = -0.85 * gSin;
-            rArmYaw = -0.35 * gSin;
-            rElbowFlex = -2.15 * gSin;
-            rWristFlex = 0.38 * gSin;
-            rWristYaw = -0.15 * gSin;
+            // Thoughtful chin-touch gesture: hand lifts toward chin, gentle gaze
+            totalHeadPitch += 0.03 * gSin;
+            totalHeadYaw += 0.06 * gSin;
+            totalHeadRoll += -0.025 * gSin;
+            rArmPitch = -0.48 * gSin;
+            rArmRoll = -0.65 * gSin;
+            rArmYaw = -0.25 * gSin;
+            rElbowPitch = -1.45 * gSin;
+            rElbowRoll = -0.15 * gSin;
+            rWristFlex = 0.25 * gSin;
+            rWristYaw = -0.10 * gSin;
           } else if (currentGesture.name === "shy") {
             // Two-handed demure front clasp
-            totalHeadPitch += 0.12 * gSin;
-            totalHeadRoll += 0.05 * gSin;
-            lArmPitch = -0.45 * gSin;
-            lArmRoll = 0.45 * gSin;
-            lArmYaw = 0.35 * gSin;
-            rArmPitch = -0.45 * gSin;
-            rArmRoll = -0.45 * gSin;
-            rArmYaw = -0.35 * gSin;
-            lElbowFlex = 1.35 * gSin;
-            rElbowFlex = -1.35 * gSin;
-            lWristFlex = 0.25 * gSin;
-            rWristFlex = -0.25 * gSin;
+            totalHeadPitch += 0.06 * gSin;
+            totalHeadRoll += 0.02 * gSin;
+            lArmPitch = -0.35 * gSin;
+            lArmRoll = 0.35 * gSin;
+            lArmYaw = 0.25 * gSin;
+            rArmPitch = -0.35 * gSin;
+            rArmRoll = -0.35 * gSin;
+            rArmYaw = -0.25 * gSin;
+            lElbowPitch = -0.85 * gSin;
+            rElbowPitch = -0.85 * gSin;
+            lWristFlex = 0.18 * gSin;
+            rWristFlex = -0.18 * gSin;
           } else if (currentGesture.name === "excited") {
             // Joyful chest bounce with raised hands
-            const bounce = Math.abs(Math.sin(p * 16.0)) * 0.045;
-            totalHeadPitch += -bounce * 1.8;
-            lArmPitch = -0.55 * gSin;
-            lArmRoll = 0.55 * gSin;
-            rArmPitch = -0.55 * gSin;
-            rArmRoll = -0.55 * gSin;
-            lElbowFlex = 1.75 * gSin;
-            rElbowFlex = -1.75 * gSin;
+            const bounce = Math.abs(Math.sin(p * 14.0)) * 0.03;
+            totalHeadPitch += -bounce * 1.5;
+            lArmPitch = -0.45 * gSin;
+            lArmRoll = 0.75 * gSin;
+            rArmPitch = -0.45 * gSin;
+            rArmRoll = -0.75 * gSin;
+            lElbowPitch = -1.25 * gSin;
+            rElbowPitch = -1.25 * gSin;
           } else if (currentGesture.name === "shrug") {
-            totalHeadRoll += gSin * 0.08;
-            lArmPitch = -0.25 * gSin;
-            rArmPitch = -0.25 * gSin;
+            totalHeadRoll += gSin * 0.04;
+            lArmPitch = -0.20 * gSin;
+            rArmPitch = -0.20 * gSin;
             lArmRoll = 0.25 * gSin;
             rArmRoll = -0.25 * gSin;
-            lElbowFlex = 1.25 * gSin;
-            rElbowFlex = -1.25 * gSin;
-            lWristFlex = -0.35 * gSin;
-            rWristFlex = 0.35 * gSin;
+            lElbowPitch = -0.85 * gSin;
+            rElbowPitch = -0.85 * gSin;
+            lWristFlex = -0.20 * gSin;
+            rWristFlex = 0.20 * gSin;
           } else if (currentGesture.name === "lean") {
-            const lean = gSin * 0.10;
-            totalHeadPitch += -lean * 0.6;
-            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.8, 0, 0);
-            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 1.0, 0, 0);
+            const lean = gSin * 0.08;
+            totalHeadPitch += -lean * 0.5;
+            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
+            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.8, 0, 0);
           }
         } else {
           currentGesture.name = "none";
@@ -564,10 +559,10 @@ function initBabylon() {
       // 5. Scapulohumeral Rhythm (Shoulders naturally elevate when arms raise)
       const shoulderLift = breathPhase * 0.005;
       const gSinElev = currentGesture.name !== "none" ? Math.sin((animTime - currentGesture.startTime) / currentGesture.duration * Math.PI) : 0;
-      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.22 * gSinElev : 0) + (currentGesture.name === "shrug" ? 0.20 * gSinElev : 0);
+      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.18 * gSinElev : 0) + (currentGesture.name === "shrug" ? 0.18 * gSinElev : 0);
 
       const rShoulderElev = rArmPitch * -0.20 + Math.abs(rArmRoll) * 0.15 + gestureShoulderLift;
-      const lShoulderElev = lArmPitch * -0.20 + Math.abs(lArmRoll) * 0.15 + (currentGesture.name === "shrug" ? 0.20 * gSinElev : 0);
+      const lShoulderElev = lArmPitch * -0.20 + Math.abs(lArmRoll) * 0.15 + (currentGesture.name === "shrug" ? 0.18 * gSinElev : 0);
       if (activeBones.leftShoulder) {
         setBoneEuler(activeBones.leftShoulder, 0.02, 0, -0.04 - lShoulderElev - shoulderLift);
       }
@@ -592,8 +587,8 @@ function initBabylon() {
       // 8. Apply Arms, Elbows, and Wrists
       if (activeBones.leftArm) setBoneEuler(activeBones.leftArm, lArmPitch, lArmYaw, lArmRoll);
       if (activeBones.rightArm) setBoneEuler(activeBones.rightArm, rArmPitch, rArmYaw, rArmRoll);
-      if (activeBones.leftElbow) setBoneEuler(activeBones.leftElbow, 0, lElbowFlex, 0);
-      if (activeBones.rightElbow) setBoneEuler(activeBones.rightElbow, 0, rElbowFlex, 0);
+      if (activeBones.leftElbow) setBoneEuler(activeBones.leftElbow, lElbowPitch, lElbowYaw, lElbowRoll);
+      if (activeBones.rightElbow) setBoneEuler(activeBones.rightElbow, rElbowPitch, rElbowYaw, rElbowRoll);
       if (activeBones.leftWrist) setBoneEuler(activeBones.leftWrist, lLag, lWristYaw, lWristFlex);
       if (activeBones.rightWrist) setBoneEuler(activeBones.rightWrist, rLag, rWristYaw, rWristFlex);
     }
@@ -742,9 +737,7 @@ async function loadCharacterModel(filename) {
         if (mmdRuntime) {
           try {
             currentMmdModel = mmdRuntime.createMmdModel(mmdMesh);
-            console.log(`[Avatar] Successfully initialized Babylon-MMD model for "${mmdMesh.name}"`);
-            // Automatically launch human-level natural idle motion
-            playVmdMotion("motions/idle.vmd", true);
+            console.log(`[Avatar] Successfully initialized Babylon-MMD model for "${mmdMesh.name}" (standby for VMD dances/motions)`);
           } catch (mmdErr) {
             console.warn("[Avatar] Failed to create MmdModel for mesh:", mmdErr);
           }
@@ -1126,17 +1119,11 @@ function setWaifuState(state) {
     if (chatInput) {
       chatInput.placeholder = "Speaking (type to interrupt)...";
     }
-    if (currentMmdModel && activeMotionUrl !== "motions/talk.vmd") {
-      playVmdMotion("motions/talk.vmd", true);
-    }
   } else if (state === "finished") {
     if (statusPill) statusPill.className = "status-pill connected";
     if (statusText) statusText.textContent = "Ready";
     if (chatInput) {
       chatInput.placeholder = "Talk to your Waifu...";
-    }
-    if (currentMmdModel && activeMotionUrl === "motions/talk.vmd") {
-      playVmdMotion("motions/idle.vmd", true);
     }
     if (activityTag) {
       activityTag.className = "activity-badge finished";
@@ -1151,9 +1138,6 @@ function setWaifuState(state) {
     if (statusText) statusText.textContent = "Ready";
     if (chatInput) {
       chatInput.placeholder = "Talk to your Waifu...";
-    }
-    if (currentMmdModel && activeMotionUrl === "motions/talk.vmd") {
-      playVmdMotion("motions/idle.vmd", true);
     }
     if (activityTag) {
       activityTag.classList.add("hidden");
@@ -1777,9 +1761,28 @@ if (openMotionsBtn) {
 // Quick Motion & Gesture Chips Bar
 document.querySelectorAll(".motion-chip").forEach(chip => {
   chip.onclick = () => {
-    const motionUrl = chip.dataset.motion;
-    const isLoop = motionUrl.includes("idle") || motionUrl.includes("dance") || motionUrl.includes("talk");
-    playVmdMotion(motionUrl, isLoop);
+    document.querySelectorAll(".motion-chip").forEach(c => c.classList.remove("active"));
+    chip.classList.add("active");
+
+    const action = chip.dataset.action;
+    if (action === "idle") {
+      stopVmdMotion();
+      currentGesture.name = "none";
+    } else if (action === "gesture") {
+      if (window.triggerGesture) {
+        window.triggerGesture(chip.dataset.gesture);
+      }
+    } else if (action === "vmd") {
+      const motionUrl = chip.dataset.motion;
+      playVmdMotion(motionUrl, true);
+    } else if (chip.dataset.motion) {
+      const motionUrl = chip.dataset.motion;
+      if (motionUrl.includes("idle")) {
+        stopVmdMotion();
+      } else {
+        playVmdMotion(motionUrl, true);
+      }
+    }
   };
 });
 
