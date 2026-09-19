@@ -54,6 +54,103 @@ function setBoneRestEuler(bone, pitch, yaw, roll) {
 
 let currentAnimationGroups = [];
 let currentCharacterFile = null;
+
+// --- Babylon-MMD & VMD Motion System ---
+let mmdRuntime = null;
+let currentMmdModel = null;
+let vmdLoader = null;
+let activeMotionUrl = null;
+let isMotionLooping = true;
+let cachedVmdMotions = {};
+let availableMotions = [];
+
+function initMmdRuntime() {
+  if (window.BABYLONMMD && !mmdRuntime) {
+    try {
+      if (window.BABYLONMMD.RegisterMmdRuntimeModelAnimation) {
+        window.BABYLONMMD.RegisterMmdRuntimeModelAnimation();
+      }
+      mmdRuntime = new window.BABYLONMMD.MmdRuntime(scene);
+      mmdRuntime.register(scene);
+      vmdLoader = new window.BABYLONMMD.VmdLoader(scene);
+
+      // Handle motion playback completion & seamless looping / return to idle
+      mmdRuntime.onPauseAnimationObservable.add(() => {
+        if (isMotionLooping && currentMmdModel) {
+          mmdRuntime.seekAnimation(0);
+          mmdRuntime.playAnimation();
+        } else if (!isMotionLooping && currentMmdModel) {
+          if (isPlayingAudio) {
+            playVmdMotion("motions/talk.vmd", true);
+          } else {
+            playVmdMotion("motions/idle.vmd", true);
+          }
+        }
+      });
+      console.log("[MMD] Babylon-MMD Runtime initialized successfully.");
+    } catch (e) {
+      console.warn("[MMD] Could not initialize MmdRuntime:", e);
+    }
+  }
+}
+
+async function playVmdMotion(motionUrlOrFile, loop = false) {
+  if (!currentMmdModel || !mmdRuntime) {
+    console.log("[Motion] No active MMD model or runtime, skipping VMD playback:", motionUrlOrFile);
+    return;
+  }
+  if (!vmdLoader) {
+    vmdLoader = new window.BABYLONMMD.VmdLoader(scene);
+  }
+
+  try {
+    isMotionLooping = loop;
+    let anim = null;
+    const cacheKey = typeof motionUrlOrFile === "string" ? motionUrlOrFile : (motionUrlOrFile.name || "custom_vmd");
+
+    if (cachedVmdMotions[cacheKey]) {
+      anim = cachedVmdMotions[cacheKey];
+    } else {
+      console.log(`[Motion] Loading VMD: ${cacheKey}...`);
+      anim = await vmdLoader.loadAsync(cacheKey, motionUrlOrFile);
+      if (typeof motionUrlOrFile === "string") {
+        cachedVmdMotions[cacheKey] = anim;
+      }
+    }
+
+    if (anim && currentMmdModel) {
+      const runtimeAnim = currentMmdModel.createRuntimeAnimation(anim);
+      currentMmdModel.setRuntimeAnimation(runtimeAnim);
+      mmdRuntime.seekAnimation(0);
+      mmdRuntime.playAnimation();
+      activeMotionUrl = cacheKey;
+      console.log(`[Motion] Playing VMD: ${cacheKey} (loop: ${loop})`);
+      updateActiveMotionUI(cacheKey);
+    }
+  } catch (err) {
+    console.warn("[Motion] Error playing VMD motion:", err);
+  }
+}
+
+function updateActiveMotionUI(motionUrl) {
+  document.querySelectorAll(".motion-chip").forEach(chip => {
+    const chipMotion = chip.dataset.motion;
+    if (chipMotion === motionUrl || motionUrl.endsWith(chipMotion)) {
+      chip.classList.add("active");
+    } else {
+      chip.classList.remove("active");
+    }
+  });
+  document.querySelectorAll(".motion-item").forEach(item => {
+    const itemUrl = item.dataset.motionUrl;
+    if (itemUrl === motionUrl || motionUrl.endsWith(itemUrl)) {
+      item.classList.add("active");
+    } else {
+      item.classList.remove("active");
+    }
+  });
+}
+
 let ws = null;
 let audioQueue = [];
 let currentSubtitleBuffer = "";
@@ -202,11 +299,38 @@ function initBabylon() {
 
   window.triggerGesture = function(gestureName) {
     if (!gestureName || gestureName === "none") return;
-    console.log(`[Avatar] Conversation Gesture Triggered: ${gestureName}`);
+    const gName = gestureName.toLowerCase().trim();
+    console.log(`[Avatar] Conversation Gesture Triggered: ${gName}`);
+
+    // If active MMD model is present, trigger mocap-level VMD motion
+    if (currentMmdModel) {
+      const vmdMap = {
+        "wave": "motions/wave.vmd",
+        "greet": "motions/wave.vmd",
+        "bow": "motions/bow.vmd",
+        "nod": "motions/nod.vmd",
+        "agree": "motions/nod.vmd",
+        "think": "motions/thinking.vmd",
+        "thinking": "motions/thinking.vmd",
+        "cheer": "motions/cheer.vmd",
+        "excited": "motions/cheer.vmd",
+        "happy": "motions/cheer.vmd",
+        "dance": "motions/circulation_dance.vmd",
+        "drink": "motions/drink.vmd",
+        "sneak": "motions/sneak.vmd",
+        "walk": "motions/walk.vmd"
+      };
+      if (vmdMap[gName]) {
+        playVmdMotion(vmdMap[gName], false);
+        return;
+      }
+    }
+
+    // Procedural fallback
     currentGesture = {
-      name: gestureName.toLowerCase().trim(),
+      name: gName,
       startTime: animTime,
-      duration: gestureName === "wave" ? 2.6 : (gestureName === "excited" ? 2.0 : 1.8)
+      duration: gName === "wave" ? 2.6 : (gName === "excited" ? 2.0 : 1.8)
     };
   };
 
@@ -275,6 +399,7 @@ function initBabylon() {
     }
 
     const hasEmbeddedMocap = currentAnimationGroups && currentAnimationGroups.length > 0;
+    const hasActiveMmdMotion = currentMmdModel && currentMmdModel.currentAnimation;
 
     // --- Syllables & Speech Metrics ---
     const syllableNod = (Math.sin(animTime * 6.2) * liveSpeechEnergy * 0.032) + (speechCadenceBeat * 0.028);
@@ -290,7 +415,7 @@ function initBabylon() {
     let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
     let totalHeadRoll = idleHeadRoll + speechTilt;
 
-    if (hasEmbeddedMocap) {
+    if (hasEmbeddedMocap || hasActiveMmdMotion) {
       // ══════════════════════════════════════════════════════════════
       // MODE A: EMBEDDED MOCAP / ANIMATION GROUP (e.g. Grok Ms. Ani, DLP3D GLBs)
       // Let the 1000+ channel mocap track animate full-body fluidly.
@@ -526,6 +651,14 @@ async function loadCharacterModel(filename) {
     avatarMesh.dispose();
     avatarMesh = null;
   }
+  if (currentMmdModel && mmdRuntime) {
+    try {
+      mmdRuntime.destroyMmdModel(currentMmdModel);
+    } catch (e) {
+      console.warn("[MMD] Error destroying previous MmdModel:", e);
+    }
+    currentMmdModel = null;
+  }
   activeMorphTargets = {};
   activeMorphTargetManager = null;
 
@@ -599,6 +732,24 @@ async function loadCharacterModel(filename) {
       console.log(`[Avatar] Playing primary mocap track "${primaryTrack.name}" with ${primaryTrack.targetedAnimations ? primaryTrack.targetedAnimations.length : 0} channels.`);
     } else {
       currentAnimationGroups = [];
+
+      // Check for MMD skinned mesh to attach babylon-mmd runtime and load VMD motions
+      const isPmxOrPmd = filename.toLowerCase().endsWith(".pmx") || filename.toLowerCase().endsWith(".pmd");
+      const mmdMesh = result.meshes.find(m => m.metadata && m.metadata.isMmdModel && m.metadata.skeleton) || (isPmxOrPmd ? result.meshes[0] : null);
+
+      if (isPmxOrPmd && mmdMesh) {
+        initMmdRuntime();
+        if (mmdRuntime) {
+          try {
+            currentMmdModel = mmdRuntime.createMmdModel(mmdMesh);
+            console.log(`[Avatar] Successfully initialized Babylon-MMD model for "${mmdMesh.name}"`);
+            // Automatically launch human-level natural idle motion
+            playVmdMotion("motions/idle.vmd", true);
+          } catch (mmdErr) {
+            console.warn("[Avatar] Failed to create MmdModel for mesh:", mmdErr);
+          }
+        }
+      }
     }
 
     // Scan all meshes for MorphTargetManager to drive visemes & emotions
@@ -975,11 +1126,17 @@ function setWaifuState(state) {
     if (chatInput) {
       chatInput.placeholder = "Speaking (type to interrupt)...";
     }
+    if (currentMmdModel && activeMotionUrl !== "motions/talk.vmd") {
+      playVmdMotion("motions/talk.vmd", true);
+    }
   } else if (state === "finished") {
     if (statusPill) statusPill.className = "status-pill connected";
     if (statusText) statusText.textContent = "Ready";
     if (chatInput) {
       chatInput.placeholder = "Talk to your Waifu...";
+    }
+    if (currentMmdModel && activeMotionUrl === "motions/talk.vmd") {
+      playVmdMotion("motions/idle.vmd", true);
     }
     if (activityTag) {
       activityTag.className = "activity-badge finished";
@@ -994,6 +1151,9 @@ function setWaifuState(state) {
     if (statusText) statusText.textContent = "Ready";
     if (chatInput) {
       chatInput.placeholder = "Talk to your Waifu...";
+    }
+    if (currentMmdModel && activeMotionUrl === "motions/talk.vmd") {
+      playVmdMotion("motions/idle.vmd", true);
     }
     if (activityTag) {
       activityTag.classList.add("hidden");
@@ -1417,6 +1577,7 @@ chatForm.onsubmit = (e) => {
 openSettingsBtn.onclick = () => {
   settingsDrawer.classList.remove("hidden");
   fetchCharacters();
+  fetchMotions();
   fetchModels();
   loadConfig();
 };
@@ -1514,14 +1675,125 @@ async function uploadAndLoadCharacter(file) {
   }
 }
 
-// Drag & drop support on 3D viewport
+// --- MMD Motions & Dances (.vmd) Management ---
+async function fetchMotions() {
+  const motionsList = document.getElementById("motions-list");
+  if (!motionsList) return;
+  try {
+    const res = await fetch("/api/motions");
+    const data = await res.json();
+    availableMotions = data.motions || [];
+    renderMotionsList(availableMotions);
+  } catch (err) {
+    console.error("Error fetching motions:", err);
+    motionsList.innerHTML = `<div class="status-msg error">Failed to load motions: ${err.message}</div>`;
+  }
+}
+
+function renderMotionsList(motions) {
+  const motionsList = document.getElementById("motions-list");
+  if (!motionsList) return;
+  if (!motions || motions.length === 0) {
+    motionsList.innerHTML = `<div class="status-msg">No motion clips found.</div>`;
+    return;
+  }
+  motionsList.innerHTML = "";
+  motions.forEach(m => {
+    const div = document.createElement("div");
+    div.className = "motion-item" + (activeMotionUrl === m.url ? " active" : "");
+    div.dataset.motionUrl = m.url;
+    div.innerHTML = `
+      <div class="motion-info">
+        <span class="motion-name">${m.name}</span>
+        <div class="motion-meta">
+          <span class="motion-badge ${m.category}">${m.category}</span>
+          <span>${m.filename} (${m.size_kb} KB)</span>
+        </div>
+      </div>
+      <div class="motion-actions">
+        <button class="motion-btn play-btn" title="Play Once">▶ Play</button>
+        <button class="motion-btn loop-btn" title="Play & Loop">🔁 Loop</button>
+      </div>
+    `;
+
+    div.querySelector(".play-btn").onclick = (e) => {
+      e.stopPropagation();
+      playVmdMotion(m.url, false);
+    };
+
+    div.querySelector(".loop-btn").onclick = (e) => {
+      e.stopPropagation();
+      playVmdMotion(m.url, true);
+    };
+
+    div.onclick = () => {
+      const isLoop = m.category === "idle" || m.category === "dance" || m.category === "action";
+      playVmdMotion(m.url, isLoop);
+    };
+
+    motionsList.appendChild(div);
+  });
+}
+
+const uploadMotionBtn = document.getElementById("upload-motion-btn");
+const motionFileInput = document.getElementById("motion-file-input");
+
+if (uploadMotionBtn && motionFileInput) {
+  uploadMotionBtn.onclick = () => motionFileInput.click();
+  motionFileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    await playVmdMotion(file, true);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const res = await fetch("/api/motions/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchMotions();
+      }
+    } catch (err) {
+      console.warn("Could not save uploaded motion to backend:", err);
+    }
+  };
+}
+
+const openMotionsBtn = document.getElementById("open-motions-btn");
+if (openMotionsBtn) {
+  openMotionsBtn.onclick = () => {
+    settingsDrawer.classList.remove("hidden");
+    fetchMotions();
+    fetchCharacters();
+    const section = document.getElementById("motions-settings-section");
+    if (section) section.scrollIntoView({ behavior: "smooth" });
+  };
+}
+
+// Quick Motion & Gesture Chips Bar
+document.querySelectorAll(".motion-chip").forEach(chip => {
+  chip.onclick = () => {
+    const motionUrl = chip.dataset.motion;
+    const isLoop = motionUrl.includes("idle") || motionUrl.includes("dance") || motionUrl.includes("talk");
+    playVmdMotion(motionUrl, isLoop);
+  };
+});
+
+// Drag & drop support on 3D viewport (Supports .vmd motion files AND .pmx/.glb avatars)
 window.addEventListener("dragover", (e) => e.preventDefault());
 window.addEventListener("drop", async (e) => {
   e.preventDefault();
   if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
     const file = e.dataTransfer.files[0];
     const name = file.name.toLowerCase();
-    if (name.endsWith(".glb") || name.endsWith(".gltf") || name.endsWith(".pmx") || name.endsWith(".pmd") || name.endsWith(".zip")) {
+    if (name.endsWith(".vmd")) {
+      console.log("[Drop] Playing dropped VMD motion:", file.name);
+      await playVmdMotion(file, true);
+    } else if (name.endsWith(".glb") || name.endsWith(".gltf") || name.endsWith(".pmx") || name.endsWith(".pmd") || name.endsWith(".zip")) {
       await uploadAndLoadCharacter(file);
     }
   }
@@ -1532,4 +1804,5 @@ window.addEventListener("DOMContentLoaded", () => {
   initBabylon();
   connectWebSocket();
   loadConfig();
+  fetchMotions();
 });

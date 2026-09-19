@@ -29,6 +29,7 @@
         <button id="cam-face-btn" class="icon-btn" title="Focus Face">👤 Face</button>
         <button id="cam-body-btn" class="icon-btn" title="Focus Full Body">👗 Full Body</button>
         <button id="test-blink-btn" class="icon-btn" title="Trigger Blink">😉 Blink</button>
+        <button id="open-motions-btn" class="icon-btn" title="MMD Motions & Dances">💃 Motions</button>
         <button id="open-settings-btn" class="icon-btn" title="Settings & Model Selection">
           ⚙️ Settings
         </button>
@@ -54,6 +55,18 @@
         <div id="subtitle-box" class="subtitle-box hidden">
           <p id="subtitle-text"></p>
         </div>
+      </div>
+
+      <!-- Quick Motion & Gesture Chips Bar -->
+      <div id="quick-motions-bar" class="quick-motions-bar">
+        <button class="motion-chip active" data-motion="motions/idle.vmd" title="Idle Breathing">🌸 Idle</button>
+        <button class="motion-chip" data-motion="motions/talk.vmd" title="Speaking Gesture">💬 Talk</button>
+        <button class="motion-chip" data-motion="motions/wave.vmd" title="Hand Wave">👋 Wave</button>
+        <button class="motion-chip" data-motion="motions/bow.vmd" title="Polite Bow">🙇 Bow</button>
+        <button class="motion-chip" data-motion="motions/nod.vmd" title="Nod Agree">😊 Nod</button>
+        <button class="motion-chip" data-motion="motions/thinking.vmd" title="Thinking">🤔 Think</button>
+        <button class="motion-chip" data-motion="motions/cheer.vmd" title="Cheer Up">🎉 Cheer</button>
+        <button class="motion-chip" data-motion="motions/circulation_dance.vmd" title="Renai Circulation Dance">💃 Dance</button>
       </div>
 
       <!-- Floating Chat Input Bar -->
@@ -90,6 +103,19 @@
           </div>
           <div id="characters-list" class="item-list">
             <div class="loading-spinner">Loading characters...</div>
+          </div>
+        </section>
+
+        <!-- MMD Motions & Dances (.vmd) Section -->
+        <section id="motions-settings-section" class="settings-section">
+          <h3>MMD Motions & Dances (.vmd)</h3>
+          <p class="desc">Play mocap animations, load dance clips, or drag-and-drop any .vmd file directly onto the 3D viewport</p>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <button id="upload-motion-btn" class="action-btn primary" style="margin-bottom:0;">📁 Import Custom Motion (.vmd)</button>
+            <input type="file" id="motion-file-input" accept=".vmd" style="display:none;" />
+          </div>
+          <div id="motions-list" class="item-list">
+            <div class="loading-spinner">Loading motions...</div>
           </div>
         </section>
 

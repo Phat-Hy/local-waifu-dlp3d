@@ -360,6 +360,68 @@ async def select_character(req: CharacterSelectRequest):
     return {"success": True, "active_character": req.character_file}
 
 
+MOTION_METADATA = {
+    "idle.vmd": ("Natural Idle & Breathing", "idle"),
+    "talk.vmd": ("Conversational Talk & Gestures", "conversational"),
+    "wave.vmd": ("Cute Wave", "gesture"),
+    "bow.vmd": ("Formal Greeting Bow", "gesture"),
+    "nod.vmd": ("Gentle Nod (Agree)", "gesture"),
+    "thinking.vmd": ("Thinking & Head Tilt", "gesture"),
+    "cheer.vmd": ("Cheer & Celebration", "gesture"),
+    "drink.vmd": ("Drink (Hand to Mouth)", "gesture"),
+    "swing_left.vmd": ("Left Arm Swing", "gesture"),
+    "walk.vmd": ("Walk Locomotion", "action"),
+    "sprint.vmd": ("Sprint / Run", "action"),
+    "sneak.vmd": ("Sneak Posture", "action"),
+    "tokino_dance.vmd": ("Tokino Dance", "dance"),
+    "wavefile_dance.vmd": ("Wavefile Dance", "dance"),
+    "heartbeat_dance.vmd": ("Heartbeat Dance", "dance"),
+    "circulation_dance.vmd": ("Renai Circulation Dance", "dance"),
+    "galaxy_dance.vmd": ("Galaxy Dance", "dance"),
+    "neko_dance.vmd": ("Neko MMD Dance", "dance"),
+    "elect_dance.vmd": ("Elect MMD Dance", "dance"),
+    "shakeit_dance.vmd": ("Shake It Dance", "dance"),
+}
+
+
+@app.get("/api/motions")
+async def list_motions():
+    motions_dir = Path(__file__).parent.parent / "frontend" / "motions"
+    motions_dir.mkdir(parents=True, exist_ok=True)
+    motions = []
+    category_order = {"idle": 0, "conversational": 1, "gesture": 2, "action": 3, "dance": 4, "custom": 5}
+    for file_path in motions_dir.glob("*.vmd"):
+        fname = file_path.name
+        name, category = MOTION_METADATA.get(fname, (fname.replace(".vmd", "").replace("_", " ").title(), "custom"))
+        motions.append({
+            "id": file_path.stem,
+            "name": name,
+            "category": category,
+            "filename": fname,
+            "url": f"motions/{fname}",
+            "size_kb": round(file_path.stat().st_size / 1024, 1)
+        })
+    motions.sort(key=lambda m: (category_order.get(m["category"], 9), m["name"]))
+    return {"motions": motions}
+
+
+@app.post("/api/motions/upload")
+async def upload_motion(file: UploadFile = File(...)):
+    if not file.filename.lower().endswith(".vmd"):
+        raise HTTPException(status_code=400, detail="Only .vmd motion files are supported.")
+    motions_dir = Path(__file__).parent.parent / "frontend" / "motions"
+    motions_dir.mkdir(parents=True, exist_ok=True)
+    destination = motions_dir / file.filename
+    with open(destination, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {
+        "success": True,
+        "filename": file.filename,
+        "url": f"motions/{file.filename}",
+        "size_kb": round(destination.stat().st_size / 1024, 1)
+    }
+
+
 from backend.character_generator import generate_character_personality
 
 

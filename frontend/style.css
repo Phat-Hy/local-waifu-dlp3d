@@ -499,3 +499,137 @@ textarea {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Quick Floating Motion Bar */
+.quick-motions-bar {
+  position: absolute;
+  bottom: 82px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 17, 26, 0.75);
+  backdrop-filter: blur(16px);
+  padding: 6px 12px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  z-index: 5;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 90vw;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.quick-motions-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.motion-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.motion-chip:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.motion-chip.active {
+  background: linear-gradient(135deg, var(--accent), var(--accent-purple));
+  border-color: transparent;
+  color: white;
+  box-shadow: 0 2px 10px rgba(255, 64, 129, 0.35);
+}
+
+/* Motion items in settings drawer */
+.motion-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: all 0.2s ease;
+}
+
+.motion-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.motion-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.motion-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.motion-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.motion-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.motion-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.motion-badge.idle { background: rgba(0, 230, 118, 0.2); color: #00e676; }
+.motion-badge.conversational { background: rgba(33, 150, 243, 0.2); color: #2196f3; }
+.motion-badge.gesture { background: rgba(255, 171, 0, 0.2); color: #ffab00; }
+.motion-badge.dance { background: rgba(233, 30, 99, 0.2); color: #e91e63; }
+.motion-badge.action { background: rgba(156, 39, 176, 0.2); color: #ba68c8; }
+.motion-badge.custom { background: rgba(255, 255, 255, 0.15); color: #e0e0e0; }
+
+.motion-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.motion-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.motion-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
