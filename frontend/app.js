@@ -286,9 +286,9 @@ function initBabylon() {
     const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
     const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
 
-    const totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
-    const totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
-    const totalHeadRoll = idleHeadRoll + speechTilt;
+    let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
+    let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
+    let totalHeadRoll = idleHeadRoll + speechTilt;
 
     if (hasEmbeddedMocap) {
       // ══════════════════════════════════════════════════════════════
