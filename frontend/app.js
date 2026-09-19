@@ -58,6 +58,7 @@ let currentCharacterFile = null;
 // --- Babylon-MMD & VMD Motion System ---
 let mmdRuntime = null;
 let currentMmdModel = null;
+let cachedMmdMesh = null;
 let vmdLoader = null;
 let activeMotionUrl = null;
 let isMotionLooping = true;
@@ -95,7 +96,9 @@ function stopVmdMotion() {
     try {
       mmdRuntime.pauseAnimation();
       currentMmdModel.setRuntimeAnimation(null);
+      mmdRuntime.destroyMmdModel(currentMmdModel);
     } catch (e) {}
+    currentMmdModel = null;
   }
   activeMotionUrl = null;
   updateActiveMotionUI(null);
@@ -103,10 +106,12 @@ function stopVmdMotion() {
 }
 
 async function playVmdMotion(motionUrlOrFile, loop = false) {
-  if (!currentMmdModel || !mmdRuntime) {
-    console.log("[Motion] No active MMD model or runtime, skipping VMD playback:", motionUrlOrFile);
+  if (!cachedMmdMesh) {
+    console.log("[Motion] No active MMD mesh available, skipping VMD playback:", motionUrlOrFile);
     return;
   }
+  initMmdRuntime();
+  if (!mmdRuntime) return;
   if (!vmdLoader) {
     vmdLoader = new window.BABYLONMMD.VmdLoader(scene);
   }
@@ -117,7 +122,7 @@ async function playVmdMotion(motionUrlOrFile, loop = false) {
     const cacheKey = typeof motionUrlOrFile === "string" ? motionUrlOrFile : (motionUrlOrFile.name || "custom_vmd");
 
     // If already playing this motion in the same loop mode, don't restart from 0
-    if (activeMotionUrl === cacheKey && currentMmdModel.currentAnimation) {
+    if (activeMotionUrl === cacheKey && currentMmdModel && currentMmdModel.currentAnimation) {
       return;
     }
 
@@ -131,7 +136,10 @@ async function playVmdMotion(motionUrlOrFile, loop = false) {
       }
     }
 
-    if (anim && currentMmdModel) {
+    if (anim) {
+      if (!currentMmdModel) {
+        currentMmdModel = mmdRuntime.createMmdModel(cachedMmdMesh);
+      }
       const runtimeAnim = currentMmdModel.createRuntimeAnimation(anim);
       currentMmdModel.setRuntimeAnimation(runtimeAnim);
       mmdRuntime.seekAnimation(0);
@@ -316,14 +324,26 @@ function initBabylon() {
     console.log(`[Avatar] Conversation Gesture Triggered: ${gName}`);
 
     // If an MMD dance/VMD is currently playing, return to procedural mode for the gesture
-    if (currentMmdModel && currentMmdModel.currentAnimation) {
+    if (currentMmdModel) {
       stopVmdMotion();
     }
+
+    const durationMap = {
+      wave: 2.8,
+      excited: 2.4,
+      think: 2.6,
+      shy: 2.4,
+      shrug: 2.2,
+      lean: 2.5,
+      laugh: 2.0,
+      nod: 1.6,
+      tilt: 2.0
+    };
 
     currentGesture = {
       name: gName,
       startTime: animTime,
-      duration: gName === "wave" ? 2.8 : (gName === "excited" ? 2.2 : (gName === "think" ? 2.6 : 1.8))
+      duration: durationMap[gName] || 2.0
     };
   };
 
@@ -446,23 +466,22 @@ function initBabylon() {
         setBoneEuler(activeBones.chest, breathPitch * 0.85 + chestVocalLift, swayYaw * 0.5, swayRoll * 0.5);
       }
 
-      // 3. Dynamic Co-Speech Hand & Arm Phrasing
-      const armSpeechEnergy = liveSpeechEnergy * 0.08;
-      const armBreathSway = Math.sin(animTime * 1.55) * 0.010;
+      // 3. Relaxed Respiratory Arm Sway (No involuntary hand twitching during normal speech)
+      const armBreathSway = Math.sin(animTime * 1.55) * 0.008;
 
-      let lArmPitch = armSpeechEnergy * 0.3;
+      let lArmPitch = 0;
       let lArmYaw = 0;
-      let lArmRoll = armBreathSway + armSpeechEnergy * 0.5;
+      let lArmRoll = armBreathSway;
 
-      let rArmPitch = armSpeechEnergy * 0.3;
+      let rArmPitch = 0;
       let rArmYaw = 0;
-      let rArmRoll = -armBreathSway - armSpeechEnergy * 0.5;
+      let rArmRoll = -armBreathSway;
 
-      let lElbowPitch = armSpeechEnergy * 0.20;
+      let lElbowPitch = 0;
       let lElbowYaw = 0;
       let lElbowRoll = 0;
 
-      let rElbowPitch = armSpeechEnergy * 0.20;
+      let rElbowPitch = 0;
       let rElbowYaw = 0;
       let rElbowRoll = 0;
 
@@ -482,74 +501,103 @@ function initBabylon() {
           const gSin = Math.sin(p * Math.PI);
 
           if (currentGesture.name === "wave") {
-            // Cute, fluid anime greeting wave: arm raises high, elbow hinges naturally, hand waves beside head
-            const handWave = Math.sin(p * 18.0) * 0.35;
-            rArmPitch = -0.45 * gSin;
-            rArmRoll = -0.85 * gSin;
-            rArmYaw = -0.18 * gSin;
-            rElbowPitch = -1.25 * gSin;
-            rElbowRoll = -0.22 * gSin;
+            // High, joyful anime greeting wave beside head with waving wrist and spread fingers
+            const handWave = Math.sin(p * 14.0) * 0.45;
+            rArmPitch = 0.35 * gSin;
+            rArmYaw = -0.35 * gSin;
+            rArmRoll = -1.85 * gSin;
+            rElbowYaw = -1.55 * gSin;
+            rElbowRoll = -0.20 * gSin;
             rWristYaw = handWave * gSin;
             rWristFlex = 0.15 * gSin;
             totalHeadPitch += -0.015 * gSin;
-            totalHeadRoll += 0.025 * gSin;
+            totalHeadRoll += -0.035 * gSin;
+            if (activeBones.fingers && activeBones.fingers.length > 0) {
+              for (const f of activeBones.fingers) {
+                if (!f.isLeft) setBoneEuler(f.bone, 0, 0, -0.15 * gSin);
+              }
+            }
           } else if (currentGesture.name === "nod") {
-            const nodPitch = Math.sin(p * 12.0) * 0.06 * (1.0 - p * 0.35);
+            // Attentive double nod; arms stay relaxed at sides
+            const nodPitch = Math.sin(p * 12.0) * 0.075 * (1.0 - p * 0.3);
             totalHeadPitch += nodPitch;
           } else if (currentGesture.name === "tilt") {
-            totalHeadRoll += gSin * 0.045;
+            // Adorable curious head tilt with subtle spine counter-balance
+            totalHeadRoll += gSin * 0.042;
             totalHeadPitch += -0.015 * gSin;
+            if (activeBones.spine) setBoneEuler(activeBones.spine, 0, 0, -gSin * 0.018);
           } else if (currentGesture.name === "think") {
-            // Thoughtful chin-touch gesture: hand lifts toward chin, gentle gaze
-            totalHeadPitch += 0.03 * gSin;
+            // Thoughtful chin touch: right hand smoothly elevates to touch cheek/chin
+            totalHeadPitch += 0.025 * gSin;
             totalHeadYaw += 0.06 * gSin;
-            totalHeadRoll += -0.025 * gSin;
-            rArmPitch = -0.48 * gSin;
-            rArmRoll = -0.65 * gSin;
-            rArmYaw = -0.25 * gSin;
-            rElbowPitch = -1.45 * gSin;
-            rElbowRoll = -0.15 * gSin;
-            rWristFlex = 0.25 * gSin;
-            rWristYaw = -0.10 * gSin;
+            totalHeadRoll += -0.03 * gSin;
+            rArmPitch = 0.35 * gSin;
+            rArmYaw = -0.55 * gSin;
+            rArmRoll = -1.05 * gSin;
+            rElbowYaw = -1.75 * gSin;
+            rElbowRoll = -0.25 * gSin;
+            rWristFlex = 0.35 * gSin;
+            rWristYaw = -0.20 * gSin;
           } else if (currentGesture.name === "shy") {
-            // Two-handed demure front clasp
-            totalHeadPitch += 0.06 * gSin;
-            totalHeadRoll += 0.02 * gSin;
-            lArmPitch = -0.35 * gSin;
-            lArmRoll = 0.35 * gSin;
-            lArmYaw = 0.25 * gSin;
-            rArmPitch = -0.35 * gSin;
-            rArmRoll = -0.35 * gSin;
-            rArmYaw = -0.25 * gSin;
-            lElbowPitch = -0.85 * gSin;
-            rElbowPitch = -0.85 * gSin;
-            lWristFlex = 0.18 * gSin;
-            rWristFlex = -0.18 * gSin;
+            // Demure two-handed front clasp in front of torso
+            totalHeadPitch += 0.05 * gSin;
+            totalHeadRoll += 0.015 * gSin;
+            lArmPitch = -0.25 * gSin;
+            lArmYaw = 0.50 * gSin;
+            lArmRoll = 0.65 * gSin;
+            rArmPitch = 0.25 * gSin;
+            rArmYaw = -0.50 * gSin;
+            rArmRoll = -0.65 * gSin;
+            lElbowYaw = 1.30 * gSin;
+            rElbowYaw = -1.30 * gSin;
+            lWristFlex = 0.20 * gSin;
+            rWristFlex = -0.20 * gSin;
           } else if (currentGesture.name === "excited") {
-            // Joyful chest bounce with raised hands
-            const bounce = Math.abs(Math.sin(p * 14.0)) * 0.03;
-            totalHeadPitch += -bounce * 1.5;
-            lArmPitch = -0.45 * gSin;
-            lArmRoll = 0.75 * gSin;
-            rArmPitch = -0.45 * gSin;
-            rArmRoll = -0.75 * gSin;
-            lElbowPitch = -1.25 * gSin;
-            rElbowPitch = -1.25 * gSin;
+            // Joyful cheer: both arms raised high with celebratory bounce
+            const bounce = Math.abs(Math.sin(p * 14.0)) * 0.035;
+            totalHeadPitch += -bounce * 1.8;
+            if (activeBones.chest) setBoneEuler(activeBones.chest, -bounce * 1.2, 0, 0);
+            lArmPitch = -0.35 * gSin;
+            lArmYaw = 0.40 * gSin;
+            lArmRoll = 1.75 * gSin;
+            rArmPitch = 0.35 * gSin;
+            rArmYaw = -0.40 * gSin;
+            rArmRoll = -1.75 * gSin;
+            lElbowYaw = 1.35 * gSin;
+            rElbowYaw = -1.35 * gSin;
+            lWristFlex = -0.30 * gSin;
+            rWristFlex = 0.30 * gSin;
           } else if (currentGesture.name === "shrug") {
-            totalHeadRoll += gSin * 0.04;
+            // Expressive anime shrug: shoulders elevate, hands open outward, cute head tilt
+            totalHeadRoll += gSin * 0.038;
             lArmPitch = -0.20 * gSin;
-            rArmPitch = -0.20 * gSin;
-            lArmRoll = 0.25 * gSin;
-            rArmRoll = -0.25 * gSin;
-            lElbowPitch = -0.85 * gSin;
-            rElbowPitch = -0.85 * gSin;
-            lWristFlex = -0.20 * gSin;
-            rWristFlex = 0.20 * gSin;
+            rArmPitch = 0.20 * gSin;
+            lArmYaw = 0.30 * gSin;
+            rArmYaw = -0.30 * gSin;
+            lArmRoll = 0.45 * gSin;
+            rArmRoll = -0.45 * gSin;
+            lElbowYaw = 0.75 * gSin;
+            rElbowYaw = -0.75 * gSin;
+            lWristFlex = -0.30 * gSin;
+            rWristFlex = 0.30 * gSin;
           } else if (currentGesture.name === "lean") {
-            const lean = gSin * 0.08;
-            totalHeadPitch += -lean * 0.5;
-            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.6, 0, 0);
-            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.8, 0, 0);
+            // Leans upper body warmly closer towards user/camera
+            const lean = gSin * 0.12;
+            totalHeadPitch += -lean * 0.6;
+            if (activeBones.spine) setBoneEuler(activeBones.spine, lean * 0.7, 0, 0);
+            if (activeBones.chest) setBoneEuler(activeBones.chest, lean * 0.9, 0, 0);
+          } else if (currentGesture.name === "laugh") {
+            // Cute giggle: right hand covers mouth, subtle chest giggle vibration
+            const giggle = Math.sin(p * 22.0) * 0.012;
+            totalHeadPitch += -0.02 * gSin + giggle * 0.5;
+            totalHeadRoll += -0.025 * gSin;
+            if (activeBones.chest) setBoneEuler(activeBones.chest, giggle, 0, 0);
+            rArmPitch = 0.30 * gSin;
+            rArmYaw = -0.50 * gSin;
+            rArmRoll = -1.10 * gSin;
+            rElbowYaw = -1.80 * gSin;
+            rWristFlex = 0.35 * gSin;
+            rWristYaw = -0.20 * gSin;
           }
         } else {
           currentGesture.name = "none";
@@ -559,15 +607,17 @@ function initBabylon() {
       // 5. Scapulohumeral Rhythm (Shoulders naturally elevate when arms raise)
       const shoulderLift = breathPhase * 0.005;
       const gSinElev = currentGesture.name !== "none" ? Math.sin((animTime - currentGesture.startTime) / currentGesture.duration * Math.PI) : 0;
-      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.18 * gSinElev : 0) + (currentGesture.name === "shrug" ? 0.18 * gSinElev : 0);
+      const gestureShoulderLift = (currentGesture.name === "wave" ? 0.28 * gSinElev : 0)
+                               + (currentGesture.name === "shrug" ? 0.30 * gSinElev : 0)
+                               + (currentGesture.name === "excited" ? 0.25 * gSinElev : 0);
 
-      const rShoulderElev = rArmPitch * -0.20 + Math.abs(rArmRoll) * 0.15 + gestureShoulderLift;
-      const lShoulderElev = lArmPitch * -0.20 + Math.abs(lArmRoll) * 0.15 + (currentGesture.name === "shrug" ? 0.18 * gSinElev : 0);
+      const rShoulderElev = Math.abs(rArmRoll) * 0.12 + gestureShoulderLift;
+      const lShoulderElev = Math.abs(lArmRoll) * 0.12 + (currentGesture.name === "shrug" || currentGesture.name === "excited" ? gestureShoulderLift : 0);
       if (activeBones.leftShoulder) {
-        setBoneEuler(activeBones.leftShoulder, 0.02, 0, -0.04 - lShoulderElev - shoulderLift);
+        setBoneEuler(activeBones.leftShoulder, 0, 0, -lShoulderElev - shoulderLift);
       }
       if (activeBones.rightShoulder) {
-        setBoneEuler(activeBones.rightShoulder, 0.02, 0, 0.04 + rShoulderElev + shoulderLift);
+        setBoneEuler(activeBones.rightShoulder, 0, 0, rShoulderElev + shoulderLift);
       }
 
       // 6. Cervical Spine Articulation (30% neck, 70% head)
@@ -733,15 +783,9 @@ async function loadCharacterModel(filename) {
       const mmdMesh = result.meshes.find(m => m.metadata && m.metadata.isMmdModel && m.metadata.skeleton) || (isPmxOrPmd ? result.meshes[0] : null);
 
       if (isPmxOrPmd && mmdMesh) {
+        cachedMmdMesh = mmdMesh;
         initMmdRuntime();
-        if (mmdRuntime) {
-          try {
-            currentMmdModel = mmdRuntime.createMmdModel(mmdMesh);
-            console.log(`[Avatar] Successfully initialized Babylon-MMD model for "${mmdMesh.name}" (standby for VMD dances/motions)`);
-          } catch (mmdErr) {
-            console.warn("[Avatar] Failed to create MmdModel for mesh:", mmdErr);
-          }
-        }
+        console.log(`[Avatar] Registered PMX mesh "${mmdMesh.name}" for procedural companion mode & on-demand MMD dances.`);
       }
     }
 
