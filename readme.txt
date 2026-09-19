@@ -18,6 +18,9 @@ without sending any data to external cloud servers.
 Built upon the open-source foundations of DLP3D (Digital Life Project 2)
 by dlp3d-ai: https://github.com/dlp3d-ai/dlp3d.ai
 
+* Live Conversation Demo: A full 1080p recording is available in assets/demo.mp4
+  (accompanied by animated preview assets/demo_preview.gif).
+
 -------------------------------------------------------------------------------
 2. KEY FEATURES
 -------------------------------------------------------------------------------

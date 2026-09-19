@@ -23,6 +23,20 @@ Built upon the open-source foundations of [**DLP3D (Digital Life Project 2)**](h
 
 ---
 
+## 🎬 Live Demonstration
+
+<div align="center">
+
+[![Watch the Live Demo](assets/demo_preview.gif)](assets/demo.mp4)
+
+**▶️ [Click here to watch or download the full 1080p video with audio (assets/demo.mp4)](assets/demo.mp4)**
+
+*Real-time local Qwen LLM conversation, F5-TTS zero-shot voice cloning, and synchronized 3D lip-sync, gestures, and biological motion.*
+
+</div>
+
+---
+
 ## ✨ Key Features
 
 ### 1. 🎭 3D Avatar & Procedural Motion Engine
