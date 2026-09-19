@@ -19,6 +19,8 @@
 
 **Local AI Waifu (DLP3D)** is a production-grade, offline AI companion engine designed to run completely on consumer hardware (such as an NVIDIA RTX 4060 Laptop GPU). It pairs local LLM reasoning with real-time 3D animation and instant neural voice cloning, creating an expressive, lively companion that speaks, gestures, and reacts naturally without sending any data to cloud providers.
 
+Built upon the open-source foundations of [**DLP3D (Digital Life Project 2)**](https://github.com/dlp3d-ai/dlp3d.ai), this project extends the system with dedicated MMD PMX physics, local GGUF models, F5-TTS zero-shot voice cloning, and biological motion synthesis.
+
 ---
 
 ## ✨ Key Features
@@ -209,6 +211,19 @@ Open **Settings & Model Hub** (`⚙️ Settings` button in top right). You can s
 
 #### 3. How do I interrupt her when she's speaking?
 Simply type a new message and press `Enter`. The client immediately terminates active WebAudio playback and clears queued speech packets.
+
+---
+
+## 🙏 Credits & Acknowledgements
+
+This project stands on the shoulders of incredible open-source innovations. Heartfelt gratitude to the authors and maintainers of:
+
+* **[dlp3d-ai/dlp3d.ai](https://github.com/dlp3d-ai/dlp3d.ai)** (Digital Life Project 2) — The architectural foundation for real-time 3D avatar embodiment, web client layout, and blendshape/viseme animation drivers.
+* **[SWivid/F5-TTS](https://github.com/SWivid/F5-TTS)** — Non-autoregressive Flow Matching speech synthesis model that powers our real-time zero-shot voice cloning.
+* **[noname0310/babylon-mmd](https://github.com/noname0310/babylon-mmd)** — MMD `.pmx` model loader, SDEF physics, and Japanese morph runtime for Babylon.js.
+* **[FunAudioLLM/CosyVoice](https://github.com/FunAudioLLM/CosyVoice)** — Expressive multi-lingual voice synthesis framework.
+* **[ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)** / **[Ollama](https://ollama.ai)** — Ultra-fast local GGUF inference and quantization.
+* **[Cover Corp / Hololive Production](https://hololivepro.com)** — Original character design and 3D MMD assets for Shiori Novella (used under Hololive Derivative Works Guidelines).
 
 ---
 

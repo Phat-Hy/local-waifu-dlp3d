@@ -15,6 +15,9 @@ together local language model reasoning, real-time 3D animation, and instant
 neural voice cloning so your companion speaks, gestures, and reacts naturally
 without sending any data to external cloud servers.
 
+Built upon the open-source foundations of DLP3D (Digital Life Project 2)
+by dlp3d-ai: https://github.com/dlp3d-ai/dlp3d.ai
+
 -------------------------------------------------------------------------------
 2. KEY FEATURES
 -------------------------------------------------------------------------------
@@ -109,7 +112,24 @@ kernels, launch the Waifu orchestrator on port 18002, and open your browser!
 └── run.ps1                   # 1-Click launcher script
 
 -------------------------------------------------------------------------------
-6. LICENSE
+6. ACKNOWLEDGEMENTS & UPSTREAM PROJECTS
+-------------------------------------------------------------------------------
+Special thanks to the authors and maintainers of the following open-source works:
+- DLP3D (Digital Life Project 2): https://github.com/dlp3d-ai/dlp3d.ai
+  Avatar rendering layout, blendshape viseme logic, and web client base.
+- F5-TTS: https://github.com/SWivid/F5-TTS
+  Flow Matching zero-shot speech synthesis engine.
+- babylon-mmd: https://github.com/noname0310/babylon-mmd
+  MMD .pmx model loader and Japanese morph runtime for Babylon.js.
+- CosyVoice: https://github.com/FunAudioLLM/CosyVoice
+  Multi-lingual speech generation research.
+- llama.cpp / Ollama: https://github.com/ggerganov/llama.cpp
+  High-performance local GGUF inference engine.
+- Cover Corp / Hololive Production: https://hololivepro.com
+  Character design and original MMD assets for Shiori Novella.
+
+-------------------------------------------------------------------------------
+7. LICENSE
 -------------------------------------------------------------------------------
 Released under the MIT License. Character models and voice materials belong to
 their respective copyright holders (Cover Corp / Hololive Production).
