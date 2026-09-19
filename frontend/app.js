@@ -281,6 +281,15 @@ function initBabylon() {
     const pitchLift = liveSpeechPitchCentroid > 24 ? -(liveSpeechPitchCentroid - 24) * 0.0012 : 0;
     const speechTilt = Math.sin(animTime * 2.3) * liveSpeechEnergy * 0.022;
 
+    // --- Head Orientation & Saccadic Metrics ---
+    const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.014;
+    const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
+    const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
+
+    const totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
+    const totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
+    const totalHeadRoll = idleHeadRoll + speechTilt;
+
     if (hasEmbeddedMocap) {
       // ══════════════════════════════════════════════════════════════
       // MODE A: EMBEDDED MOCAP / ANIMATION GROUP (e.g. Grok Ms. Ani, DLP3D GLBs)
@@ -323,15 +332,6 @@ function initBabylon() {
       if (activeBones.chest) {
         setBoneEuler(activeBones.chest, breathPitch * 0.85 + chestVocalLift, swayYaw * 0.5, swayRoll * 0.5);
       }
-
-      // 2. Head & Neck Articulation
-      const idleHeadPitch = organicHarmonic(animTime, 0.72, 0.8) * 0.014;
-      const idleHeadYaw = organicHarmonic(animTime, 0.54, 3.2) * 0.016;
-      const idleHeadRoll = organicHarmonic(animTime, 0.61, 5.1) * 0.012;
-
-      let totalHeadPitch = idleHeadPitch + syllableNod + pitchLift + gazeState.currentY * 0.55;
-      let totalHeadYaw = idleHeadYaw + gazeState.currentX * 0.65;
-      let totalHeadRoll = idleHeadRoll + speechTilt;
 
       // 3. Dynamic Co-Speech Hand & Arm Phrasing
       const armSpeechEnergy = liveSpeechEnergy * 0.08;
