@@ -56,6 +56,7 @@ let currentAnimationGroups = [];
 let currentCharacterFile = null;
 let ws = null;
 let audioQueue = [];
+let currentSubtitleBuffer = "";
 let isPlayingAudio = false;
 let audioContext = null;
 let audioAnalyser = null;
@@ -869,19 +870,126 @@ function applyEmotionBlendshape(emotion, blendshapes) {
   }
 }
 
-// --- 4. WebAudio Streaming Queue ---
+// --- 4. WebAudio Streaming Queue & Activity State ---
+let currentAudioSource = null;
+let currentVisemeInterval = null;
+let currentWaifuState = "idle";
+let finishTimer = null;
+let isBackendDone = true;
+
+function setWaifuState(state) {
+  currentWaifuState = state;
+  const activityTag = document.getElementById("activity-tag");
+  const statusPill = document.getElementById("status-pill");
+  const statusText = statusPill ? statusPill.querySelector(".text") : null;
+  const chatInput = document.getElementById("chat-input");
+
+  if (finishTimer) {
+    clearTimeout(finishTimer);
+    finishTimer = null;
+  }
+
+  if (state === "thinking") {
+    if (statusPill) statusPill.className = "status-pill thinking";
+    if (statusText) statusText.textContent = "Thinking...";
+    if (activityTag) {
+      activityTag.className = "activity-badge thinking";
+      activityTag.innerHTML = `<span class="pulse-spinner"></span><span>Pondering...</span>`;
+      activityTag.classList.remove("hidden");
+    }
+    if (chatInput) {
+      chatInput.placeholder = "Thinking...";
+    }
+  } else if (state === "speaking") {
+    if (statusPill) statusPill.className = "status-pill speaking";
+    if (statusText) statusText.textContent = "Speaking...";
+    if (activityTag) {
+      activityTag.className = "activity-badge speaking";
+      activityTag.innerHTML = `<span class="sound-wave"><span></span><span></span><span></span></span><span>Speaking</span>`;
+      activityTag.classList.remove("hidden");
+    }
+    if (chatInput) {
+      chatInput.placeholder = "Speaking (type to interrupt)...";
+    }
+  } else if (state === "finished") {
+    if (statusPill) statusPill.className = "status-pill connected";
+    if (statusText) statusText.textContent = "Ready";
+    if (chatInput) {
+      chatInput.placeholder = "Talk to your Waifu...";
+    }
+    if (activityTag) {
+      activityTag.className = "activity-badge finished";
+      activityTag.innerHTML = `<span>✓</span><span>Finished</span>`;
+      activityTag.classList.remove("hidden");
+      finishTimer = setTimeout(() => {
+        activityTag.classList.add("hidden");
+      }, 2500);
+    }
+  } else if (state === "idle") {
+    if (statusPill) statusPill.className = "status-pill connected";
+    if (statusText) statusText.textContent = "Ready";
+    if (chatInput) {
+      chatInput.placeholder = "Talk to your Waifu...";
+    }
+    if (activityTag) {
+      activityTag.classList.add("hidden");
+    }
+  }
+}
+
+function resetVisemes() {
+  if (activeMorphTargets && activeMorphTargets.proceduralMouth) {
+    activeMorphTargets.proceduralMouth.scaling.y = 0.5;
+    activeMorphTargets.proceduralMouth.scaling.x = 1.0;
+  }
+  setMorphInfluence(["mouthopen", "jawopen", "mouth_open", "viseme_aa", "あ", "い", "う", "え", "お"], 0, false);
+}
+
+function stopCurrentSpeech() {
+  audioQueue = [];
+  isPlayingAudio = false;
+  if (currentVisemeInterval) {
+    clearInterval(currentVisemeInterval);
+    currentVisemeInterval = null;
+  }
+  if (currentAudioSource) {
+    try {
+      currentAudioSource.stop();
+      currentAudioSource.disconnect();
+    } catch (e) {}
+    currentAudioSource = null;
+  }
+  resetVisemes();
+  setWaifuState("idle");
+}
+
 function playNextAudioChunk() {
   if (audioQueue.length === 0) {
     isPlayingAudio = false;
-    if (activeMorphTargets.proceduralMouth) {
-      activeMorphTargets.proceduralMouth.scaling.y = 0.5;
-      activeMorphTargets.proceduralMouth.scaling.x = 1.0;
+    resetVisemes();
+    if (isBackendDone && !currentAudioSource) {
+      setWaifuState("finished");
     }
     return;
   }
 
   isPlayingAudio = true;
+  setWaifuState("speaking");
   const packet = audioQueue.shift();
+
+  // Synchronize emotion blendshape and character gesture with this spoken audio chunk
+  if (packet.emotion) {
+    applyEmotionBlendshape(packet.emotion, packet.blendshapes);
+  }
+  if (packet.gesture && packet.gesture !== "none" && window.triggerGesture) {
+    window.triggerGesture(packet.gesture);
+  }
+
+  // If packet has no audio (e.g. action-only gesture/expression), advance immediately
+  if (!packet.audio_base64 || packet.audio_base64.length < 10) {
+    playNextAudioChunk();
+    return;
+  }
 
   if (!audioContext) {
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -903,7 +1011,11 @@ function playNextAudioChunk() {
   }
 
   audioContext.decodeAudioData(bytes.buffer, (audioBuffer) => {
+    if (currentAudioSource) {
+      try { currentAudioSource.stop(); currentAudioSource.disconnect(); } catch (e) {}
+    }
     const source = audioContext.createBufferSource();
+    currentAudioSource = source;
     source.buffer = audioBuffer;
     source.connect(audioAnalyser);
     audioAnalyser.connect(audioContext.destination);
@@ -912,10 +1024,14 @@ function playNextAudioChunk() {
     const startTime = performance.now();
     const visemes = packet.visemes || [];
 
-    const visemeInterval = setInterval(() => {
+    if (currentVisemeInterval) {
+      clearInterval(currentVisemeInterval);
+    }
+    currentVisemeInterval = setInterval(() => {
       const elapsedSec = (performance.now() - startTime) / 1000;
       if (elapsedSec > audioBuffer.duration) {
-        clearInterval(visemeInterval);
+        clearInterval(currentVisemeInterval);
+        currentVisemeInterval = null;
         return;
       }
       const frame = visemes.find((f) => Math.abs(f.timestamp - elapsedSec) < 0.035);
@@ -925,8 +1041,17 @@ function playNextAudioChunk() {
     }, 30);
 
     source.onended = () => {
-      clearInterval(visemeInterval);
-      playNextAudioChunk();
+      if (currentVisemeInterval) {
+        clearInterval(currentVisemeInterval);
+        currentVisemeInterval = null;
+      }
+      currentAudioSource = null;
+      resetVisemes();
+      if (audioQueue.length === 0 && isBackendDone) {
+        setWaifuState("finished");
+      } else {
+        playNextAudioChunk();
+      }
     };
 
     source.start(0);
@@ -956,15 +1081,18 @@ function connectWebSocket() {
 
     if (data.type === "token") {
       subtitleBox.classList.remove("hidden");
-      subtitleText.textContent += data.content;
+      currentSubtitleBuffer += data.content;
+      // Clean emotion/gesture bracketed tags from UI display
+      subtitleText.textContent = currentSubtitleBuffer.replace(/\[[a-zA-Z0-9_\-:]+\]/g, "").replace(/\s+/g, " ").trimStart();
     } else if (data.type === "audio_packet") {
-      applyEmotionBlendshape(data.emotion, data.blendshapes);
-      if (data.gesture && data.gesture !== "none" && window.triggerGesture) {
-        window.triggerGesture(data.gesture);
-      }
       audioQueue.push(data);
       if (!isPlayingAudio) {
         playNextAudioChunk();
+      }
+    } else if (data.type === "done") {
+      isBackendDone = true;
+      if (audioQueue.length === 0 && !currentAudioSource) {
+        setWaifuState("finished");
       }
     }
   };
@@ -1147,6 +1275,10 @@ async function loadConfig() {
     if (cfg.tts?.active_voice_path) {
       voicePathInput.value = cfg.tts.active_voice_path;
     }
+    const ttsEngineSelect = document.getElementById("tts-engine-select");
+    if (cfg.tts?.engine && ttsEngineSelect) {
+      ttsEngineSelect.value = cfg.tts.engine;
+    }
     if (cfg.tts?.voice_name && voicePresetSelect) {
       voicePresetSelect.value = cfg.tts.voice_name;
     }
@@ -1163,6 +1295,25 @@ async function loadConfig() {
 }
 
 // --- 7. Event Listeners ---
+const ttsEngineSelect = document.getElementById("tts-engine-select");
+if (ttsEngineSelect) {
+  ttsEngineSelect.onchange = async () => {
+    const selectedEngine = ttsEngineSelect.value;
+    try {
+      await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { tts: { engine: selectedEngine } } }),
+      });
+      voiceStatus.className = "status-msg success";
+      voiceStatus.textContent = `✓ Voice engine set to: ${selectedEngine.toUpperCase()}`;
+    } catch (err) {
+      voiceStatus.className = "status-msg error";
+      voiceStatus.textContent = `✗ Failed to update voice engine: ${err.message}`;
+    }
+  };
+}
+
 if (voicePresetSelect) {
   voicePresetSelect.onchange = async () => {
     const selectedVoice = voicePresetSelect.value;
@@ -1186,7 +1337,11 @@ chatForm.onsubmit = (e) => {
   const text = chatInput.value.trim();
   if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
 
-  subtitleText.textContent = "";
+  stopCurrentSpeech();
+  isBackendDone = false;
+  setWaifuState("thinking");
+  currentSubtitleBuffer = "";
+  subtitleText.textContent = "...";
   subtitleBox.classList.remove("hidden");
   if (window.triggerGesture) {
     window.triggerGesture("think");

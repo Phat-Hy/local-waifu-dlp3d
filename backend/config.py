@@ -36,7 +36,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "system_prompt": DEFAULT_SYSTEM_PROMPT,
     },
     "tts": {
-        "engine": "cosyvoice",  # cosyvoice | edge_tts
+        "engine": "f5-tts",  # f5-tts | cosyvoice | edge_tts
         "voice_name": "en-US-AnaNeural",
         "active_voice_path": "",  # Path to user-selected reference .wav file
         "sample_rate": 22050,

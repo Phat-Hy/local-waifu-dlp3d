@@ -24,7 +24,8 @@ from pydantic import BaseModel
 from backend.config import ConfigManager
 from backend.scanner import scan_directory_for_models, validate_audio_file, parse_gguf_metadata, convert_audio_to_wav
 from backend.emotion import EmotionStreamProcessor
-from backend.tts import MockTTSClient, CosyVoiceTTSClient, extract_audio_visemes
+from backend.tts import MockTTSClient, CosyVoiceTTSClient, F5TTSClient, get_tts_client, extract_audio_visemes
+from backend.llm import get_llm_engine
 
 app = FastAPI(title="Local AI Waifu Orchestrator", version="1.0.0")
 
@@ -39,12 +40,21 @@ app.add_middleware(
 
 config_mgr = ConfigManager()
 
-# Initialize TTS Client (CosyVoice with real Neural Anime speech fallback)
-tts_engine_name = config_mgr.get("tts", "engine", default="cosyvoice")
+# Initialize TTS Client (F5-TTS / CosyVoice / Edge-TTS)
+tts_engine_name = config_mgr.get("tts", "engine", default="f5-tts")
 preset_voice = config_mgr.get("tts", "voice_name", default="en-US-AnaNeural")
-tts_client = CosyVoiceTTSClient()
-if hasattr(tts_client, "fallback_tts"):
-    tts_client.fallback_tts.voice_name = preset_voice
+tts_client = get_tts_client(tts_engine_name, preset_voice)
+
+# Initialize LLM Engine (Native GPU GGUF via llama_cpp)
+active_model_path = config_mgr.get("llm", "active_model_path")
+if not active_model_path or not os.path.exists(active_model_path):
+    scan_dirs = config_mgr.get("llm", "scan_directories", default=["models"])
+    scanned_models = scan_directory_for_models(scan_dirs)
+    if scanned_models:
+        active_model_path = scanned_models[0]["path"]
+        config_mgr.set("llm", "active_model_path", active_model_path)
+
+llm_engine = get_llm_engine(active_model_path) if active_model_path else None
 
 
 
@@ -108,6 +118,8 @@ async def select_model(req: ModelSelectRequest):
         raise HTTPException(status_code=400, detail=f"Invalid GGUF file: {meta.get('error')}")
 
     config_mgr.set("llm", "active_model_path", req.model_path)
+    global llm_engine
+    llm_engine = get_llm_engine(req.model_path)
     return {
         "success": True,
         "active_model": meta,
@@ -209,11 +221,12 @@ async def update_config(req: ConfigUpdateRequest):
             config_mgr.config[k] = v
     config_mgr.save()
 
-    # Update fallback voice if changed
-    if "tts" in req.settings and isinstance(req.settings["tts"], dict) and "voice_name" in req.settings["tts"]:
-        voice_name = req.settings["tts"]["voice_name"]
-        if hasattr(tts_client, "fallback_tts"):
-            tts_client.fallback_tts.voice_name = voice_name
+    # Update active TTS engine or fallback voice if changed
+    if "tts" in req.settings and isinstance(req.settings["tts"], dict):
+        global tts_client
+        engine = config_mgr.get("tts", "engine", default="f5-tts")
+        voice_name = config_mgr.get("tts", "voice_name", default="en-US-AnaNeural")
+        tts_client = get_tts_client(engine, voice_name)
 
     return {"success": True, "config": config_mgr.config}
 
@@ -407,7 +420,7 @@ async def websocket_chat(websocket: WebSocket):
     Feeds real-time audio chunks, visemes, gestures, and 3D blendshapes to the frontend.
     """
     await websocket.accept()
-    processor = EmotionStreamProcessor()
+    conversation_history: List[Dict[str, str]] = []
 
     try:
         while True:
@@ -419,32 +432,93 @@ async def websocket_chat(websocket: WebSocket):
                 continue
 
             prompt_voice = config_mgr.get("tts", "active_voice_path")
-            
-            # Formulate smart, dynamic contextual response with emotion & gesture tags
-            dialogue_stream = formulate_contextual_dialogue(user_text)
+            system_prompt = config_mgr.get("llm", "system_prompt")
+            conversation_history.append({"role": "user", "content": user_text})
 
-            for token in dialogue_stream:
-                # Send raw token for real-time text subtitle display
-                await websocket.send_json({
-                    "type": "token",
-                    "content": token,
-                })
-                
-                # Check if a sentence completed
-                sentences = processor.process_token(token)
-                for s in sentences:
-                    # Synthesize audio for this sentence
+            assistant_tokens: List[str] = []
+            used_llm = False
+
+            if llm_engine and llm_engine.is_loaded():
+                try:
+                    # Stream tokens & parsed sentences from real local LLM
+                    for chunk in llm_engine.stream_chat(conversation_history[-8:], system_prompt=system_prompt):
+                        c_type = chunk.get("type")
+                        if c_type == "token":
+                            tok = chunk["token"]
+                            assistant_tokens.append(tok)
+                            await websocket.send_json({"type": "token", "content": tok})
+                        elif c_type == "sentence":
+                            speakable_text = chunk["text"].strip()
+                            if speakable_text:
+                                wav_bytes = tts_client.synthesize(
+                                    text=speakable_text,
+                                    emotion=chunk["emotion"],
+                                    voice_reference_path=prompt_voice,
+                                )
+                                visemes = extract_audio_visemes(wav_bytes)
+                                audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+                            else:
+                                audio_b64 = ""
+                                visemes = []
+
+                            await websocket.send_json({
+                                "type": "audio_packet",
+                                "text": speakable_text,
+                                "emotion": chunk["emotion"],
+                                "gesture": chunk.get("gesture", "none"),
+                                "blendshapes": chunk["blendshapes"],
+                                "visemes": visemes,
+                                "audio_base64": audio_b64,
+                                "format": "wav",
+                            })
+                        elif c_type == "error":
+                            print(f"[LLM Engine] Stream error: {chunk.get('error')}")
+                        await asyncio.sleep(0.01)
+
+                    used_llm = True
+                except Exception as e:
+                    print(f"[WebSocket Chat] LLM streaming exception: {e}")
+                    used_llm = False
+
+            if not used_llm:
+                # Fallback to rule-based contextual dialogue
+                processor = EmotionStreamProcessor()
+                dialogue_stream = formulate_contextual_dialogue(user_text)
+                for token in dialogue_stream:
+                    assistant_tokens.append(token)
+                    await websocket.send_json({
+                        "type": "token",
+                        "content": token,
+                    })
+                    sentences = processor.process_token(token)
+                    for s in sentences:
+                        wav_bytes = tts_client.synthesize(
+                            text=s["text"],
+                            emotion=s["emotion"],
+                            voice_reference_path=prompt_voice,
+                        )
+                        visemes = extract_audio_visemes(wav_bytes)
+                        audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+                        await websocket.send_json({
+                            "type": "audio_packet",
+                            "text": s["text"],
+                            "emotion": s["emotion"],
+                            "gesture": s.get("gesture", "none"),
+                            "blendshapes": s["blendshapes"],
+                            "visemes": visemes,
+                            "audio_base64": audio_b64,
+                            "format": "wav",
+                        })
+                    await asyncio.sleep(0.04)
+
+                for s in processor.flush():
                     wav_bytes = tts_client.synthesize(
                         text=s["text"],
                         emotion=s["emotion"],
                         voice_reference_path=prompt_voice,
                     )
-                    
-                    # Extract synchronized visemes (mouth openness + vowels)
                     visemes = extract_audio_visemes(wav_bytes)
                     audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
-
-                    # Emit complete multimodal packet with dynamic gesture
                     await websocket.send_json({
                         "type": "audio_packet",
                         "text": s["text"],
@@ -456,29 +530,10 @@ async def websocket_chat(websocket: WebSocket):
                         "format": "wav",
                     })
 
-                await asyncio.sleep(0.04)
-
-            # Flush any remaining text
-            final_sentences = processor.flush()
-            for s in final_sentences:
-                wav_bytes = tts_client.synthesize(
-                    text=s["text"],
-                    emotion=s["emotion"],
-                    voice_reference_path=prompt_voice,
-                )
-                visemes = extract_audio_visemes(wav_bytes)
-                audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
-
-                await websocket.send_json({
-                    "type": "audio_packet",
-                    "text": s["text"],
-                    "emotion": s["emotion"],
-                    "gesture": s.get("gesture", "none"),
-                    "blendshapes": s["blendshapes"],
-                    "visemes": visemes,
-                    "audio_base64": audio_b64,
-                    "format": "wav",
-                })
+            # Record full response in conversation history
+            full_reply = "".join(assistant_tokens).strip()
+            if full_reply:
+                conversation_history.append({"role": "assistant", "content": full_reply})
 
             # Stream completion sentinel
             await websocket.send_json({"type": "done"})

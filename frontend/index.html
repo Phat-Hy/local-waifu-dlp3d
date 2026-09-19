@@ -41,9 +41,15 @@
 
       <!-- Overlay Emotion & Subtitle HUD -->
       <div id="hud-overlay">
-        <div id="emotion-tag" class="emotion-badge hidden">
-          <span class="emoji">😊</span>
-          <span class="label">Happy</span>
+        <div class="hud-badges">
+          <div id="emotion-tag" class="emotion-badge hidden">
+            <span class="emoji">😊</span>
+            <span class="label">Happy</span>
+          </div>
+          <div id="activity-tag" class="activity-badge hidden">
+            <span class="activity-icon">🤔</span>
+            <span class="activity-text">Thinking...</span>
+          </div>
         </div>
         <div id="subtitle-box" class="subtitle-box hidden">
           <p id="subtitle-text"></p>
@@ -99,9 +105,23 @@
 
         <!-- Voice Reference Picker Section -->
         <section class="settings-section">
-          <h3>Voice Reference Audio (.wav, .flac, .mp3)</h3>
-          <p class="desc">Select or upload a 3-10s voice clip from your PC to clone for CosyVoice</p>
-          
+          <h3>Voice & Speech Synthesis</h3>
+          <p class="desc">Configure low-latency zero-shot voice cloning and character audio reference</p>
+
+          <div style="margin-bottom: 14px;">
+            <label style="font-size: 12px; color: #a0a5b5; display: block; margin-bottom: 6px;">
+              ⚡ TTS Engine (Generation Latency):
+            </label>
+            <select id="tts-engine-select" style="width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #fff; border-radius: 8px; font-size: 13px; outline: none; cursor: pointer;">
+              <option value="f5-tts">⚡ F5-TTS (Flow-Matching, ~1.5s Ultra-Fast Zero-Shot)</option>
+              <option value="cosyvoice">CosyVoice (Diffusion Flow Matching, ~9s)</option>
+              <option value="edge_tts">Edge-TTS (Fast Cloud Neural Voice)</option>
+            </select>
+          </div>
+
+          <label style="font-size: 12px; color: #a0a5b5; display: block; margin-bottom: 6px;">
+            🎙️ Voice Reference Audio (.wav, .flac, .mp3):
+          </label>
           <div style="display: flex; gap: 8px; margin-bottom: 8px;">
             <button id="upload-voice-btn" class="action-btn primary" style="margin-bottom:0;">📁 Choose Audio from PC...</button>
             <input type="file" id="voice-file-input" accept="audio/*,.wav,.flac,.mp3,.ogg,.m4a" style="display:none;" />

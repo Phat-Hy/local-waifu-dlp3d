@@ -91,15 +91,39 @@ class EmotionStreamProcessor:
         self.buffer += token
         results: List[Dict[str, Any]] = []
 
-        # Check for sentence delimiters in buffer
+        # Check for sentence delimiters (. ! ? ~ \n)
         match = SENTENCE_SPLIT_PATTERN.search(self.buffer)
+        
+        # If buffer is getting long (>90 chars), also allow splitting on clause boundaries (, ; :)
+        if not match and len(self.buffer) > 90:
+            clause_match = re.search(r"([,;:\-]\s+)", self.buffer[40:])
+            if clause_match:
+                end_pos = 40 + clause_match.end()
+                sentence_raw = self.buffer[:end_pos]
+                self.buffer = self.buffer[end_pos:]
+                parsed = self._extract_emotion_and_clean_text(sentence_raw)
+                if re.search(r"\w+", parsed["text"]):
+                    results.append(parsed)
+                return results
+
+        # Emergency fallback for runaway long sentences (>150 chars without punctuation)
+        if not match and len(self.buffer) > 150:
+            space_pos = self.buffer.rfind(" ", 60, 140)
+            if space_pos > 0:
+                sentence_raw = self.buffer[:space_pos]
+                self.buffer = self.buffer[space_pos + 1:]
+                parsed = self._extract_emotion_and_clean_text(sentence_raw)
+                if re.search(r"\w+", parsed["text"]):
+                    results.append(parsed)
+                return results
+
         while match:
             end_pos = match.end()
             sentence_raw = self.buffer[:end_pos]
             self.buffer = self.buffer[end_pos:]
 
             parsed = self._extract_emotion_and_clean_text(sentence_raw)
-            if parsed["text"].strip():
+            if re.search(r"\w+", parsed["text"]):
                 results.append(parsed)
 
             match = SENTENCE_SPLIT_PATTERN.search(self.buffer)
@@ -113,7 +137,7 @@ class EmotionStreamProcessor:
         results: List[Dict[str, Any]] = []
         if self.buffer.strip():
             parsed = self._extract_emotion_and_clean_text(self.buffer)
-            if parsed["text"].strip():
+            if re.search(r"\w+", parsed["text"]):
                 results.append(parsed)
             self.buffer = ""
         return results
@@ -122,6 +146,7 @@ class EmotionStreamProcessor:
         """
         Detects any emotion and gesture tags in the sentence, updates self.current_emotion,
         and returns cleaned text alongside blendshape and gesture data.
+        Strips roleplay actions between asterisks (*laughs*, *blushes*) so TTS does NOT speak them.
         """
         detected_tags = EMOTION_TAG_PATTERN.findall(raw_text)
         detected_gesture = "none"
@@ -139,11 +164,69 @@ class EmotionStreamProcessor:
                 elif tag_lower in SUPPORTED_GESTURES:
                     detected_gesture = tag_lower
 
-        # Remove bracketed tags from the spoken text so TTS doesn't read tags out loud
-        cleaned_text = EMOTION_TAG_PATTERN.sub("", raw_text).strip()
+        # Extract non-verbal roleplay actions in asterisks (*giggles*, *tilts head*, etc.) to trigger 3D animations
+        action_matches = re.findall(r"(?<!\*)\*([^*]+)\*(?!\*)", raw_text)
+        for act_raw in action_matches:
+            act = act_raw.lower()
+            if any(w in act for w in ["giggle", "laugh", "chuckle", "smile", "grin", "happy"]):
+                self.current_emotion = "happy"
+                if detected_gesture == "none":
+                    detected_gesture = "laugh" if ("laugh" in act or "giggle" in act) else "excited"
+            elif any(w in act for w in ["blush", "shy", "look away", "embarrass"]):
+                self.current_emotion = "blush"
+                if detected_gesture == "none":
+                    detected_gesture = "shy"
+            elif any(w in act for w in ["nod"]):
+                if detected_gesture == "none":
+                    detected_gesture = "nod"
+            elif any(w in act for w in ["tilt"]):
+                if detected_gesture == "none":
+                    detected_gesture = "tilt"
+            elif any(w in act for w in ["think", "ponder", "wonder"]):
+                self.current_emotion = "thinking"
+                if detected_gesture == "none":
+                    detected_gesture = "think"
+            elif any(w in act for w in ["wave"]):
+                if detected_gesture == "none":
+                    detected_gesture = "wave"
+            elif any(w in act for w in ["lean"]):
+                if detected_gesture == "none":
+                    detected_gesture = "lean"
+        # Map common emoji reactions to emotions and gestures
+        if any(e in raw_text for e in ["😄", "😃", "😀", "😊", "😆", "✨", "💖", "🥰"]):
+            self.current_emotion = "happy"
+            if detected_gesture == "none":
+                detected_gesture = "wave" if ("wave" in raw_text or "hello" in raw_text.lower()) else "tilt"
+        elif any(e in raw_text for e in ["🤔", "🧐"]):
+            self.current_emotion = "thinking"
+            if detected_gesture == "none":
+                detected_gesture = "think"
+        elif any(e in raw_text for e in ["😳", "🥺", "🫣", "blush"]):
+            self.current_emotion = "blush"
+            if detected_gesture == "none":
+                detected_gesture = "shy"
+        elif any(e in raw_text for e in ["😮", "😲"]):
+            self.current_emotion = "surprised"
+        elif any(e in raw_text for e in ["😢", "😭"]):
+            self.current_emotion = "sad"
+
+        # Clean text for TTS:
+        # 1. Remove bracketed emotion tags [happy], [gesture:nod], etc.
+        cleaned = EMOTION_TAG_PATTERN.sub("", raw_text)
+        # 2. Preserve words in markdown bold **word** -> word
+        cleaned = re.sub(r"\*\*([^*]+)\*\*", r"\1", cleaned)
+        # 3. Strip out asterisk roleplay actions (*giggles*, *smiles softly*) completely so TTS never speaks them
+        cleaned = re.sub(r"(?<!\*)\*[^*]+\*(?!\*)", "", cleaned)
+        # 4. Remove emojis (high unicode & misc symbols) so vocoders / Windows charmap don't crash
+        cleaned = re.sub(r"[\U00010000-\U0010ffff]", "", cleaned)
+        cleaned = re.sub(r"[\u2600-\u27bf]", "", cleaned)
+        # 5. Remove any stray formatting characters (asterisks, backticks, tildes)
+        cleaned = re.sub(r"[*`_~#]", "", cleaned)
+        # 6. Normalize whitespace
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
 
         return {
-            "text": cleaned_text,
+            "text": cleaned,
             "raw": raw_text,
             "emotion": self.current_emotion,
             "gesture": detected_gesture,
